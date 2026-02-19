@@ -50,18 +50,32 @@ export default function MapDashboardScreen({ navigation }: any) {
         />
       </View>
 
+      {/* Bottom Nav เหมือน HomeScreen */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('MeetingPoint')}>
-          <Text style={styles.navBtnText}>📍 Set Point</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
+          <Text style={styles.navIcon}>🏠</Text>
+          <Text style={styles.navLabel}>Home</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem}>
+          <Text style={styles.navIcon}>🗺️</Text>
+          <Text style={[styles.navLabel, styles.navLabelActive]}>Map</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('MeetingPoint')}>
+          <Text style={styles.navIcon}>📍</Text>
+          <Text style={styles.navLabel}>Set Point</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={[styles.sosBtn, isSOSActive && styles.sosBtnActive]}
+          style={styles.navItem}
           onPress={() => triggerSOS(!isSOSActive)}
         >
-          <Text style={styles.sosBtnText}>{isSOSActive ? '✅ Cancel SOS' : '🚨 SOS'}</Text>
+          <Text style={styles.navIcon}>{isSOSActive ? '✅' : '🚨'}</Text>
+          <Text style={[styles.navLabel, isSOSActive && { color: 'gray' }]}>
+            {isSOSActive ? 'Cancel' : 'SOS'}
+          </Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.navBtnText}>⚙️ Settings</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
+          <Text style={styles.navIcon}>⚙️</Text>
+          <Text style={styles.navLabel}>Settings</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -88,10 +102,22 @@ const styles = StyleSheet.create({
   memberName: { flex: 1, fontSize: 15, color: '#333' },
   battery: { fontSize: 14, color: 'green' },
   lowBattery: { fontSize: 14, color: 'red', fontWeight: 'bold' },
-  bottomNav: { flexDirection: 'row', justifyContent: 'space-around', alignItems: 'center', padding: 12, backgroundColor: 'white', borderTopWidth: 1, borderTopColor: '#eee' },
-  navBtn: { padding: 10, borderRadius: 10, backgroundColor: '#F0F7FF' },
-  navBtnText: { color: '#007AFF', fontWeight: '600' },
-  sosBtn: { backgroundColor: '#D9534F', padding: 12, borderRadius: 12 },
-  sosBtnActive: { backgroundColor: '#888' },
-  sosBtnText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+  bottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 16,
+    paddingBottom: 28,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+    shadowColor: '#000',
+    shadowOpacity: 0.06,
+    shadowOffset: { width: 0, height: -2 },
+    shadowRadius: 8,
+    elevation: 10,
+  },
+  navItem: { alignItems: 'center' },
+  navIcon: { fontSize: 22 },
+  navLabel: { fontSize: 11, color: '#999', marginTop: 4 },
+  navLabelActive: { color: '#007AFF', fontWeight: '600' },
 });
