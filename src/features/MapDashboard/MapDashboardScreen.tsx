@@ -50,32 +50,18 @@ export default function MapDashboardScreen({ navigation }: any) {
         />
       </View>
 
-      {/* Bottom Nav เหมือน HomeScreen */}
       <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
-          <Text style={styles.navIcon}>🏠</Text>
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}>🗺️</Text>
-          <Text style={[styles.navLabel, styles.navLabelActive]}>Map</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('MeetingPoint')}>
-          <Text style={styles.navIcon}>📍</Text>
-          <Text style={styles.navLabel}>Set Point</Text>
+        <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('MeetingPoint')}>
+          <Text style={styles.navBtnText}>📍 Set Point</Text>
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.navItem}
+          style={[styles.sosBtn, isSOSActive && styles.sosBtnActive]}
           onPress={() => triggerSOS(!isSOSActive)}
         >
-          <Text style={styles.navIcon}>{isSOSActive ? '✅' : '🚨'}</Text>
-          <Text style={[styles.navLabel, isSOSActive && { color: 'gray' }]}>
-            {isSOSActive ? 'Cancel' : 'SOS'}
-          </Text>
+          <Text style={styles.sosBtnText}>{isSOSActive ? '✅ Cancel SOS' : '🚨 SOS'}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={styles.navLabel}>Settings</Text>
+        <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('Settings')}>
+          <Text style={styles.navBtnText}>⚙️ Settings</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -105,19 +91,16 @@ const styles = StyleSheet.create({
   bottomNav: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    paddingVertical: 16,
-    paddingBottom: 28,
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingBottom: 32, // เพิ่ม padding ด้านล่างให้สูงขึ้น
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#eee',
-    shadowColor: '#000',
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: -2 },
-    shadowRadius: 8,
-    elevation: 10,
   },
-  navItem: { alignItems: 'center' },
-  navIcon: { fontSize: 22 },
-  navLabel: { fontSize: 11, color: '#999', marginTop: 4 },
-  navLabelActive: { color: '#007AFF', fontWeight: '600' },
+  navBtn: { padding: 10, borderRadius: 10, backgroundColor: '#F0F7FF' },
+  navBtnText: { color: '#007AFF', fontWeight: '600' },
+  sosBtn: { backgroundColor: '#D9534F', padding: 12, borderRadius: 12 },
+  sosBtnActive: { backgroundColor: '#888' },
+  sosBtnText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
 });
