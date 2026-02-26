@@ -3,6 +3,9 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
 // Import หน้าจอทั้งหมดจากโฟลเดอร์ features
+import AuthChoiceScreen from './src/features/Auth/AuthChoiceScreen';
+import SignInScreen from './src/features/Auth/SignInScreen';
+import SignUpScreen from './src/features/Auth/SignUpScreen';
 import HomeScreen from './src/features/Home/HomeScreen';
 import TripManagementScreen from './src/features/TripManagement/TripManagementScreen';
 import MapDashboardScreen from './src/features/MapDashboard/MapDashboardScreen';
@@ -16,7 +19,10 @@ const Stack = createNativeStackNavigator();
 export default function App() {
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Home">
+      <Stack.Navigator initialRouteName="AuthChoice">
+        <Stack.Screen name="AuthChoice" component={AuthChoiceScreen} options={{ headerShown: false }} />
+        <Stack.Screen name="SignIn" component={SignInScreen} options={{ title: 'Sign in' }} />
+        <Stack.Screen name="SignUp" component={SignUpScreen} options={{ title: 'Sign up' }} />
         <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
         <Stack.Screen name="TripManagement" component={TripManagementScreen} options={{ title: 'Join / Create Trip' }} />
         <Stack.Screen name="MapDashboard" component={MapDashboardScreen} options={{ headerShown: false }} />
