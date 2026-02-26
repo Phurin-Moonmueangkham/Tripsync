@@ -1,28 +1,44 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { useAuthStore } from '../../core/store/useAuthStore';
 
 const SignUpScreen = ({ navigation }) => {
-  const setUserProfile = useAuthStore((state) => state.setUserProfile);
+  const signUp = useAuthStore((state) => state.signUp);
+  const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
+  const authError = useAuthStore((state) => state.authError);
+  const clearAuthError = useAuthStore((state) => state.clearAuthError);
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
+  const [password, setPassword] = useState('');
+  const emailInputRef = useRef<TextInput>(null);
+  const phoneInputRef = useRef<TextInput>(null);
+  const passwordInputRef = useRef<TextInput>(null);
 
-  const handleSignUp = () => {
-    if (!name.trim() || !email.trim() || !phoneNumber.trim()) {
-      Alert.alert('Missing information', 'Please fill in name, email, and phone number.');
+  const handleSignUp = async () => {
+    if (!name.trim() || !email.trim() || !phoneNumber.trim() || !password.trim()) {
+      Alert.alert('Missing information', 'Please fill in name, email, phone number, and password.');
       return;
     }
 
-    setUserProfile({
-      name: name.trim(),
-      email: email.trim(),
-      phoneNumber: phoneNumber.trim(),
-    });
+    if (password.length < 6) {
+      Alert.alert('Weak password', 'Password must be at least 6 characters.');
+      return;
+    }
 
-    Alert.alert('Success', 'Your profile information has been saved.');
-    navigation.replace('Home');
+    try {
+      await signUp({
+        name,
+        email,
+        phoneNumber,
+        password,
+      });
+
+      Alert.alert('Success', 'Your account has been created.');
+    } catch {
+      // Error message is managed by store state.
+    }
   };
 
   return (
@@ -34,26 +50,65 @@ const SignUpScreen = ({ navigation }) => {
           style={styles.input}
           placeholder="Name"
           value={name}
-          onChangeText={setName}
+          returnKeyType="next"
+          onSubmitEditing={() => emailInputRef.current?.focus()}
+          blurOnSubmit={false}
+          onChangeText={(value) => {
+            clearAuthError();
+            setName(value);
+          }}
         />
         <TextInput
+          ref={emailInputRef}
           style={styles.input}
           placeholder="Email"
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
-          onChangeText={setEmail}
+          returnKeyType="next"
+          onSubmitEditing={() => phoneInputRef.current?.focus()}
+          blurOnSubmit={false}
+          onChangeText={(value) => {
+            clearAuthError();
+            setEmail(value);
+          }}
         />
         <TextInput
+          ref={phoneInputRef}
           style={styles.input}
           placeholder="Phone number"
           keyboardType="phone-pad"
           value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          returnKeyType="next"
+          onSubmitEditing={() => passwordInputRef.current?.focus()}
+          blurOnSubmit={false}
+          onChangeText={(value) => {
+            clearAuthError();
+            setPhoneNumber(value);
+          }}
+        />
+        <TextInput
+          ref={passwordInputRef}
+          style={styles.input}
+          placeholder="Password"
+          secureTextEntry
+          value={password}
+          returnKeyType="done"
+          onSubmitEditing={handleSignUp}
+          onChangeText={(value) => {
+            clearAuthError();
+            setPassword(value);
+          }}
         />
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSignUp}>
-          <Text style={styles.primaryButtonText}>Sign up</Text>
+        {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.primaryButton, isAuthLoading && styles.primaryButtonDisabled]}
+          onPress={handleSignUp}
+          disabled={isAuthLoading}
+        >
+          <Text style={styles.primaryButtonText}>{isAuthLoading ? 'Creating account...' : 'Sign up'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -94,10 +149,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '700',
+  },
+  errorText: {
+    color: '#D9534F',
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 13,
   },
 });
 

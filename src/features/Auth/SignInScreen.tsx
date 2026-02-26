@@ -1,17 +1,28 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { Alert, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useAuthStore } from '../../core/store/useAuthStore';
 
 const SignInScreen = ({ navigation }) => {
-  const [email, setEmail] = useState('');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const signIn = useAuthStore((state) => state.signIn);
+  const isAuthLoading = useAuthStore((state) => state.isAuthLoading);
+  const authError = useAuthStore((state) => state.authError);
+  const clearAuthError = useAuthStore((state) => state.clearAuthError);
 
-  const handleSignIn = () => {
-    if (!email.trim() || !phoneNumber.trim()) {
-      Alert.alert('Missing information', 'Please enter your email and phone number.');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const passwordInputRef = useRef<TextInput>(null);
+
+  const handleSignIn = async () => {
+    if (!email.trim() || !password.trim()) {
+      Alert.alert('Missing information', 'Please enter your email and password.');
       return;
     }
 
-    navigation.replace('Home');
+    try {
+      await signIn(email, password);
+    } catch {
+      // Error message is managed by store state.
+    }
   };
 
   return (
@@ -25,18 +36,36 @@ const SignInScreen = ({ navigation }) => {
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
-          onChangeText={setEmail}
+          returnKeyType="next"
+          onSubmitEditing={() => passwordInputRef.current?.focus()}
+          blurOnSubmit={false}
+          onChangeText={(value) => {
+            clearAuthError();
+            setEmail(value);
+          }}
         />
         <TextInput
+          ref={passwordInputRef}
           style={styles.input}
-          placeholder="Phone number"
-          keyboardType="phone-pad"
-          value={phoneNumber}
-          onChangeText={setPhoneNumber}
+          placeholder="Password"
+          secureTextEntry
+          value={password}
+          returnKeyType="done"
+          onSubmitEditing={handleSignIn}
+          onChangeText={(value) => {
+            clearAuthError();
+            setPassword(value);
+          }}
         />
 
-        <TouchableOpacity style={styles.primaryButton} onPress={handleSignIn}>
-          <Text style={styles.primaryButtonText}>Sign in</Text>
+        {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
+
+        <TouchableOpacity
+          style={[styles.primaryButton, isAuthLoading && styles.primaryButtonDisabled]}
+          onPress={handleSignIn}
+          disabled={isAuthLoading}
+        >
+          <Text style={styles.primaryButtonText}>{isAuthLoading ? 'Signing in...' : 'Sign in'}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -77,10 +106,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 4,
   },
+  primaryButtonDisabled: {
+    opacity: 0.7,
+  },
   primaryButtonText: {
     color: 'white',
     fontSize: 16,
     fontWeight: '700',
+  },
+  errorText: {
+    color: '#D9534F',
+    marginTop: -4,
+    marginBottom: 8,
+    fontSize: 13,
   },
 });
 

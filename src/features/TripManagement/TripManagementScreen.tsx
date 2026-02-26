@@ -1,8 +1,28 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
+import { useTripStore } from '../../core/store/useTripStore';
 
 const TripManagementScreen: React.FC<any> = ({ navigation }) => {
+  const joinTrip = useTripStore((state) => state.joinTrip);
+  const isTripLoading = useTripStore((state) => state.isTripLoading);
+  const tripError = useTripStore((state) => state.tripError);
+  const clearTripError = useTripStore((state) => state.clearTripError);
+
   const [code, setCode] = useState('');
+
+  const handleJoinTrip = async () => {
+    if (!code.trim()) {
+      Alert.alert('Missing code', 'Please enter trip code.');
+      return;
+    }
+
+    try {
+      await joinTrip(code);
+      navigation.navigate('MapDashboard');
+    } catch {
+      // error text handled by store
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -12,12 +32,18 @@ const TripManagementScreen: React.FC<any> = ({ navigation }) => {
         style={styles.input}
         placeholder="e.g., X7Y8Z9"
         value={code}
-        onChangeText={setCode}
+        onChangeText={(value) => {
+          clearTripError();
+          setCode(value);
+        }}
         autoCapitalize="characters"
         autoCorrect={false}
+        returnKeyType="done"
+        onSubmitEditing={handleJoinTrip}
       />
-      <TouchableOpacity style={styles.joinBtn} onPress={() => navigation.navigate('MapDashboard')}>
-        <Text style={styles.joinBtnText}>Join Trip</Text>
+      {tripError ? <Text style={styles.errorText}>{tripError}</Text> : null}
+      <TouchableOpacity style={[styles.joinBtn, isTripLoading && styles.joinBtnDisabled]} onPress={handleJoinTrip} disabled={isTripLoading}>
+        <Text style={styles.joinBtnText}>{isTripLoading ? 'Joining...' : 'Join Trip'}</Text>
       </TouchableOpacity>
 
       <View style={styles.dividerRow}>
@@ -39,7 +65,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 14, color: '#666', marginBottom: 6 },
   input: { backgroundColor: 'white', borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 14, fontSize: 18, letterSpacing: 4, marginBottom: 16, textAlign: 'center' },
   joinBtn: { backgroundColor: '#007AFF', padding: 16, borderRadius: 12, alignItems: 'center' },
+  joinBtnDisabled: { opacity: 0.7 },
   joinBtnText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
+  errorText: { color: '#D9534F', marginBottom: 8 },
   dividerRow: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
   divider: { flex: 1, height: 1, backgroundColor: '#ddd' },
   orText: { marginHorizontal: 12, color: '#999' },
