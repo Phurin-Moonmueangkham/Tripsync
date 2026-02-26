@@ -21,15 +21,12 @@ const HomeScreen = ({ navigation }) => {
       </View>
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navIcon}></Text>
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('MapDashboard')}>
-          <Text style={styles.navIcon}></Text>
           <Text style={styles.navLabel}>Map</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.navIcon}></Text>
           <Text style={styles.navLabel}>Settings</Text>
         </TouchableOpacity>
       </View>
@@ -52,15 +49,14 @@ const styles = StyleSheet.create({
   bottomNav: { 
     flexDirection: 'row', 
     justifyContent: 'space-around', 
-    paddingVertical: 12, 
-    paddingBottom: 32, // เพิ่ม padding ด้านล่างให้สูงขึ้น
+    paddingVertical: 16,
+    paddingBottom: 36,
     backgroundColor: 'white', 
     borderTopWidth: 1, 
     borderTopColor: '#eee' 
   },
   navItem: { alignItems: 'center' },
-  navIcon: { fontSize: 22 },
-  navLabel: { fontSize: 11, color: '#666', marginTop: 2 },
+  navLabel: { fontSize: 13, color: '#666', marginTop: 2 },
 });
 
 export default HomeScreen;

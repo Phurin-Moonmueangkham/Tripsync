@@ -1,8 +1,9 @@
 import * as Location from 'expo-location';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Modal,
   SafeAreaView,
   StyleSheet,
   Text,
@@ -11,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import MapView, { MapPressEvent, Marker, Polyline } from 'react-native-maps';
-import { geocodeByText, getDirectionsRoute, reverseGeocode } from '../../core/maps/googleMaps';
+import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useTripStore } from '../../core/store/useTripStore';
 
 type Coordinate = {
@@ -27,6 +28,7 @@ const DEFAULT_REGION = {
 };
 
 const CreateTripScreen: React.FC<any> = ({ navigation }) => {
+  const mapRef = useRef<MapView>(null);
   const createTrip = useTripStore((state) => state.createTrip);
   const isTripLoading = useTripStore((state) => state.isTripLoading);
 
@@ -38,6 +40,10 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
   const [routePreview, setRoutePreview] = useState<Coordinate[]>([]);
   const [createdTripCode, setCreatedTripCode] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
+  const [isLocating, setIsLocating] = useState(false);
+  const [isMapExpanded, setIsMapExpanded] = useState(false);
+  const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
 
   useEffect(() => {
     const initializeLocation = async () => {
@@ -74,7 +80,43 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
     };
   }, [currentLocation]);
 
+  useEffect(() => {
+    const query = searchText.trim();
+
+    if (!query) {
+      setSuggestions([]);
+      setIsSuggestionLoading(false);
+      return;
+    }
+
+    const timeoutId = setTimeout(() => {
+      setIsSuggestionLoading(true);
+      getPlaceSuggestions(query, {
+        language: 'th',
+        location: currentLocation,
+      })
+        .then((items) => {
+          setSuggestions(items);
+        })
+        .catch(() => {
+          setSuggestions([]);
+        })
+        .finally(() => {
+          setIsSuggestionLoading(false);
+        });
+    }, 280);
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
+  }, [currentLocation, searchText]);
+
   const handleMapPress = async (event: MapPressEvent) => {
+    if (!isMapExpanded) {
+      setIsMapExpanded(true);
+      return;
+    }
+
     const coordinate = event.nativeEvent.coordinate;
     setDestination(coordinate);
 
@@ -99,6 +141,48 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
       setDestination(result.location);
       setDestinationAddress(result.formattedAddress);
       setSearchText(result.formattedAddress);
+      setSuggestions([]);
+      mapRef.current?.animateToRegion(
+        {
+          ...result.location,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        600,
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Search failed', error.message);
+      } else {
+        Alert.alert('Search failed', 'Unable to search location.');
+      }
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleSelectSuggestion = async (suggestion: PlaceSuggestion) => {
+    if (isSearching) {
+      return;
+    }
+
+    try {
+      setIsSearching(true);
+      const place = suggestion.isFallback || suggestion.placeId.startsWith('geocode:')
+        ? await geocodeByText(suggestion.fullText)
+        : await getPlaceDetailsById(suggestion.placeId);
+      setDestination(place.location);
+      setDestinationAddress(place.formattedAddress);
+      setSearchText(place.formattedAddress);
+      setSuggestions([]);
+      mapRef.current?.animateToRegion(
+        {
+          ...place.location,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        600,
+      );
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Search failed', error.message);
@@ -149,6 +233,42 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
     }
   };
 
+  const handleLocateMe = async () => {
+    if (isLocating) {
+      return;
+    }
+
+    try {
+      setIsLocating(true);
+      const permission = await Location.requestForegroundPermissionsAsync();
+
+      if (permission.status !== 'granted') {
+        Alert.alert('Location unavailable', 'Please allow location access and try again.');
+        return;
+      }
+
+      const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      const nextLocation = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+      };
+
+      setCurrentLocation(nextLocation);
+      mapRef.current?.animateToRegion(
+        {
+          ...nextLocation,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        600,
+      );
+    } catch {
+      Alert.alert('Location unavailable', 'Unable to get your current location.');
+    } finally {
+      setIsLocating(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <Text style={styles.heading}>Create New Trip</Text>
@@ -165,7 +285,9 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
           style={[styles.input, styles.searchInput]}
           placeholder="Search destination from Google Maps"
           value={searchText}
-          onChangeText={setSearchText}
+          onChangeText={(value) => {
+            setSearchText(value);
+          }}
           returnKeyType="search"
           onSubmitEditing={handleSearchDestination}
         />
@@ -174,14 +296,76 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
         </TouchableOpacity>
       </View>
 
+      {(isSuggestionLoading || suggestions.length > 0) && !isSearching ? (
+        <View style={styles.suggestionList}>
+          {isSuggestionLoading ? (
+            <View style={styles.suggestionLoadingRow}>
+              <ActivityIndicator size="small" color="#1A1A2E" />
+            </View>
+          ) : (
+            suggestions.map((item) => (
+              <TouchableOpacity
+                key={item.placeId}
+                style={styles.suggestionItem}
+                onPress={() => {
+                  void handleSelectSuggestion(item);
+                }}
+              >
+                <Text style={styles.suggestionTitle} numberOfLines={1}>{item.mainText}</Text>
+                {item.secondaryText ? <Text style={styles.suggestionSubtitle} numberOfLines={1}>{item.secondaryText}</Text> : null}
+              </TouchableOpacity>
+            ))
+          )}
+        </View>
+      ) : null}
+
       <View style={styles.mapCard}>
-        <MapView style={styles.map} initialRegion={initialRegion} onPress={handleMapPress}>
+        <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion} onPress={handleMapPress} showsUserLocation>
           {destination ? <Marker coordinate={destination} title="Destination" /> : null}
           {routePreview.length > 1 ? (
             <Polyline coordinates={routePreview} strokeColor="#007AFF" strokeWidth={4} />
           ) : null}
         </MapView>
+
+        <View style={styles.expandHintContainer}>
+          <Text style={styles.expandHintText}>Tap map to expand</Text>
+        </View>
+
+        <TouchableOpacity
+          style={[styles.locateButton, isLocating && styles.locateButtonDisabled]}
+          onPress={() => {
+            void handleLocateMe();
+          }}
+          disabled={isLocating}
+        >
+          {isLocating ? <ActivityIndicator size="small" color="#1A1A2E" /> : <Text style={styles.locateButtonIcon}>⌖</Text>}
+        </TouchableOpacity>
       </View>
+
+      <Modal visible={isMapExpanded} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setIsMapExpanded(false)}>
+        <SafeAreaView style={styles.expandedMapContainer}>
+          <MapView ref={mapRef} style={styles.expandedMap} initialRegion={initialRegion} onPress={handleMapPress} showsUserLocation>
+            {destination ? <Marker coordinate={destination} title="Destination" /> : null}
+            {routePreview.length > 1 ? (
+              <Polyline coordinates={routePreview} strokeColor="#007AFF" strokeWidth={4} />
+            ) : null}
+          </MapView>
+
+          <TouchableOpacity
+            style={[styles.locateButton, isLocating && styles.locateButtonDisabled]}
+            onPress={() => {
+              void handleLocateMe();
+            }}
+            disabled={isLocating}
+          >
+            {isLocating ? <ActivityIndicator size="small" color="#1A1A2E" /> : <Text style={styles.locateButtonIcon}>⌖</Text>}
+          </TouchableOpacity>
+
+          <TouchableOpacity style={styles.closeExpandedMapButton} onPress={() => setIsMapExpanded(false)}>
+            <Text style={styles.closeExpandedMapButtonText}>Done</Text>
+          </TouchableOpacity>
+        </SafeAreaView>
+      </Modal>
 
       <Text style={styles.destinationText} numberOfLines={2}>
         {destinationAddress || 'Tap map to pin destination'}
@@ -231,16 +415,98 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: '700',
   },
+  suggestionList: {
+    marginTop: 8,
+    backgroundColor: 'white',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  suggestionLoadingRow: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  suggestionItem: {
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#F1F3F6',
+  },
+  suggestionTitle: {
+    color: '#1A1A2E',
+    fontWeight: '600',
+    fontSize: 13,
+  },
+  suggestionSubtitle: {
+    color: '#666',
+    fontSize: 12,
+    marginTop: 2,
+  },
   mapCard: {
     borderRadius: 14,
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: '#DDE1E6',
     marginTop: 12,
+    position: 'relative',
   },
   map: {
     height: 280,
     width: '100%',
+  },
+  expandedMapContainer: {
+    flex: 1,
+    backgroundColor: '#F5F7FA',
+  },
+  expandedMap: {
+    flex: 1,
+    width: '100%',
+  },
+  expandHintContainer: {
+    position: 'absolute',
+    left: 10,
+    bottom: 10,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  expandHintText: {
+    color: '#1A1A2E',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  locateButton: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 20,
+    width: 40,
+    height: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  locateButtonDisabled: { opacity: 0.6 },
+  locateButtonIcon: {
+    color: '#1A1A2E',
+    fontWeight: '700',
+    fontSize: 20,
+    lineHeight: 20,
+  },
+  closeExpandedMapButton: {
+    position: 'absolute',
+    right: 10,
+    bottom: 18,
+    backgroundColor: '#007AFF',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  closeExpandedMapButtonText: {
+    color: 'white',
+    fontWeight: '700',
+    fontSize: 13,
   },
   destinationText: {
     marginTop: 10,
