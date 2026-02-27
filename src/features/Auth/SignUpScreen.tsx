@@ -12,6 +12,7 @@ const SignUpScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const emailInputRef = useRef<TextInput>(null);
   const phoneInputRef = useRef<TextInput>(null);
   const passwordInputRef = useRef<TextInput>(null);
@@ -87,19 +88,31 @@ const SignUpScreen = ({ navigation }) => {
             setPhoneNumber(value);
           }}
         />
-        <TextInput
-          ref={passwordInputRef}
-          style={styles.input}
-          placeholder="Password"
-          secureTextEntry
-          value={password}
-          returnKeyType="done"
-          onSubmitEditing={handleSignUp}
-          onChangeText={(value) => {
-            clearAuthError();
-            setPassword(value);
-          }}
-        />
+        <View style={styles.passwordInputWrapper}>
+          <TextInput
+            ref={passwordInputRef}
+            style={[styles.input, styles.passwordInput]}
+            placeholder="Password"
+            secureTextEntry={!isPasswordVisible}
+            value={password}
+            returnKeyType="done"
+            onSubmitEditing={handleSignUp}
+            onChangeText={(value) => {
+              clearAuthError();
+              setPassword(value);
+            }}
+          />
+          <TouchableOpacity
+            style={styles.passwordToggleButton}
+            onPress={() => {
+              setIsPasswordVisible((prev) => !prev);
+            }}
+            accessibilityRole="button"
+            accessibilityLabel={isPasswordVisible ? 'Hide password' : 'Show password'}
+          >
+            <Text style={styles.passwordToggleIcon}>{isPasswordVisible ? '🙈' : '👁️'}</Text>
+          </TouchableOpacity>
+        </View>
 
         {authError ? <Text style={styles.errorText}>{authError}</Text> : null}
 
@@ -141,6 +154,24 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     marginBottom: 12,
+  },
+  passwordInputWrapper: {
+    position: 'relative',
+  },
+  passwordInput: {
+    paddingRight: 46,
+  },
+  passwordToggleButton: {
+    position: 'absolute',
+    right: 10,
+    top: 8,
+    height: 34,
+    width: 34,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  passwordToggleIcon: {
+    fontSize: 18,
   },
   primaryButton: {
     backgroundColor: '#007AFF',

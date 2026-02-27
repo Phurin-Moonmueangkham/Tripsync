@@ -27,7 +27,12 @@ const DEFAULT_REGION = {
   longitudeDelta: 0.2,
 };
 
-const CreateTripScreen: React.FC<any> = ({ navigation }) => {
+type CreateTripRouteParams = {
+  prefillDestination?: Coordinate;
+  prefillAddress?: string;
+};
+
+const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
   const mapRef = useRef<MapView>(null);
   const createTrip = useTripStore((state) => state.createTrip);
   const isTripLoading = useTripStore((state) => state.isTripLoading);
@@ -44,6 +49,8 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
   const [isLocating, setIsLocating] = useState(false);
   const [isMapExpanded, setIsMapExpanded] = useState(false);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
+
+  const routeParams = (route?.params ?? {}) as CreateTripRouteParams;
 
   useEffect(() => {
     const initializeLocation = async () => {
@@ -110,6 +117,28 @@ const CreateTripScreen: React.FC<any> = ({ navigation }) => {
       clearTimeout(timeoutId);
     };
   }, [currentLocation, searchText]);
+
+  useEffect(() => {
+    if (!routeParams.prefillDestination) {
+      return;
+    }
+
+    setDestination(routeParams.prefillDestination);
+
+    if (routeParams.prefillAddress) {
+      setDestinationAddress(routeParams.prefillAddress);
+      setSearchText(routeParams.prefillAddress);
+    }
+
+    mapRef.current?.animateToRegion(
+      {
+        ...routeParams.prefillDestination,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      600,
+    );
+  }, [routeParams.prefillAddress, routeParams.prefillDestination]);
 
   const handleMapPress = async (event: MapPressEvent) => {
     if (!isMapExpanded) {

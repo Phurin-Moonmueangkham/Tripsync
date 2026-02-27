@@ -1,6 +1,8 @@
 import * as Location from 'expo-location';
+import * as Battery from 'expo-battery';
 import {
   collection,
+  deleteDoc,
   doc,
   getDoc,
   onSnapshot,
@@ -129,6 +131,20 @@ const toCoordinate = (input: unknown): Coordinate | null => {
   return { latitude, longitude };
 };
 
+const getCurrentBatteryLevel = async (): Promise<number> => {
+  try {
+    const batteryLevel = await Battery.getBatteryLevelAsync();
+
+    if (!Number.isFinite(batteryLevel) || batteryLevel < 0) {
+      return DEFAULT_BATTERY;
+    }
+
+    return Math.max(0, Math.min(100, Math.round(batteryLevel * 100)));
+  } catch {
+    return DEFAULT_BATTERY;
+  }
+};
+
 const subscribeTripData = (tripCode: string, set: (partial: Partial<TripState>) => void) => {
   clearFirestoreSubscriptions();
 
@@ -212,6 +228,7 @@ export const useTripStore = create<TripState>((set, get) => ({
     try {
       const tripCode = await getUniqueTripCode();
       const cleanTripName = tripName.trim();
+      const batteryLevel = await getCurrentBatteryLevel();
 
       await setDoc(doc(db, 'trips', tripCode), {
         tripCode,
@@ -231,7 +248,7 @@ export const useTripStore = create<TripState>((set, get) => ({
           uid: firebaseUser.uid,
           name: firebaseUser.displayName ?? 'You',
           email: firebaseUser.email ?? '',
-          batteryLevel: DEFAULT_BATTERY,
+          batteryLevel,
           locationMode: get().locationMode,
           joinedAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -270,6 +287,7 @@ export const useTripStore = create<TripState>((set, get) => ({
 
     try {
       const normalizedCode = tripCode.trim().toUpperCase();
+      const batteryLevel = await getCurrentBatteryLevel();
       const tripSnapshot = await getDoc(doc(db, 'trips', normalizedCode));
 
       if (!tripSnapshot.exists()) {
@@ -282,7 +300,7 @@ export const useTripStore = create<TripState>((set, get) => ({
           uid: firebaseUser.uid,
           name: firebaseUser.displayName ?? 'You',
           email: firebaseUser.email ?? '',
-          batteryLevel: DEFAULT_BATTERY,
+          batteryLevel,
           locationMode: get().locationMode,
           joinedAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
@@ -304,12 +322,27 @@ export const useTripStore = create<TripState>((set, get) => ({
     }
   },
   leaveTrip: async () => {
-    clearFirestoreSubscriptions();
+    const firebaseUser = auth.currentUser;
+    const tripCode = get().currentTripCode;
+
+    set({ isTripLoading: true, tripError: null });
     clearTrackingResources();
 
-    set({
-      ...baseState,
-    });
+    try {
+      if (firebaseUser && tripCode) {
+        await deleteDoc(doc(db, 'trips', tripCode, 'members', firebaseUser.uid));
+      }
+
+      clearFirestoreSubscriptions();
+
+      set({
+        ...baseState,
+      });
+    } catch (error) {
+      const message = toErrorMessage(error);
+      set({ isTripLoading: false, tripError: message });
+      throw new Error(message);
+    }
   },
   triggerSOS: async (isActive) => {
     const tripCode = get().currentTripCode;
@@ -376,6 +409,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         latitude: location.coords.latitude,
         longitude: location.coords.longitude,
       };
+      const batteryLevel = await getCurrentBatteryLevel();
 
       set({ currentUserLocation: nextLocation, tripError: null });
 
@@ -383,6 +417,7 @@ export const useTripStore = create<TripState>((set, get) => ({
         doc(db, 'trips', tripCode, 'members', firebaseUser.uid),
         {
           location: nextLocation,
+          batteryLevel,
           locationMode: get().locationMode,
           lastUpdatedAt: Date.now(),
           updatedAt: serverTimestamp(),

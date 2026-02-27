@@ -2,12 +2,14 @@ import { create } from 'zustand';
 import {
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut as firebaseSignOut,
   updateProfile,
 } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/firebase';
+import { useTripStore } from './useTripStore';
 
 interface UserProfile {
   uid: string;
@@ -32,6 +34,7 @@ interface AuthState {
   setUserProfile: (profile: UserProfile | null) => void;
   clearAuthError: () => void;
   signIn: (email: string, password: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
   signUp: (payload: SignUpPayload) => Promise<void>;
   signOut: () => Promise<void>;
 }
@@ -131,6 +134,28 @@ export const useAuthStore = create<AuthState>((set) => ({
       throw new Error(message);
     }
   },
+  requestPasswordReset: async (email) => {
+    set({ isAuthLoading: true, authError: null });
+
+    try {
+      const trimmedEmail = email.trim();
+
+      if (!trimmedEmail) {
+        throw new Error('Please enter your email first.');
+      }
+
+      await sendPasswordResetEmail(auth, trimmedEmail);
+
+      set({
+        isAuthLoading: false,
+        authError: null,
+      });
+    } catch (error) {
+      const message = toErrorMessage(error);
+      set({ isAuthLoading: false, authError: message });
+      throw new Error(message);
+    }
+  },
   signUp: async ({ name, email, password, phoneNumber }) => {
     set({ isAuthLoading: true, authError: null });
 
@@ -174,6 +199,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isAuthLoading: true, authError: null });
 
     try {
+      await useTripStore.getState().leaveTrip();
       await firebaseSignOut(auth);
       set({
         userProfile: null,
