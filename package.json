@@ -6,7 +6,10 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "prebuild:web": "node scripts/validate-env.js",
+    "build:web": "expo export --platform web",
+    "deploy:firebase": "npm run build:web && npx firebase-tools deploy --only hosting"
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
