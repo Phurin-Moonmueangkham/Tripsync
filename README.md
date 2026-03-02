@@ -24,6 +24,7 @@ EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=...
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 EXPO_PUBLIC_FIREBASE_APP_ID=...
 EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=...
+EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY=...
 ```
 
 ## 3) Run in development
@@ -66,6 +67,17 @@ npm run deploy:firebase
 ```
 
 Firebase project id in this repo: `tripsync-1d80c`.
+
+## Google Maps keys (important)
+
+- `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
+	- Used for web map rendering (`iframe` / JS map).
+	- Usually configured with **HTTP referrer restrictions**.
+- `EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY`
+	- Used for Places Autocomplete, Place Details, Geocoding, and Directions requests from app code.
+	- For Expo Go/mobile testing, use a key without HTTP referrer restriction (or a dedicated key with API restrictions only).
+
+If search suggestions are empty on Expo Go, this is commonly due to using a referrer-restricted key for web-service APIs.
 
 ## Notes for web mode
 

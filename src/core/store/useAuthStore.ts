@@ -39,12 +39,35 @@ interface AuthState {
   signOut: () => Promise<void>;
 }
 
+const parseFirebaseError = (error: any): string => {
+  const errorCode = error?.code || '';
+  
+  // Firebase auth error codes mapped to user-friendly messages
+  const errorMap: Record<string, string> = {
+    'auth/weak-password': 'รหัสผ่านอ่อนแอเกินไป (ต้องมีอย่างน้อย 6 ตัวอักษร)',
+    'auth/email-already-in-use': 'อีเมลนี้ถูกใช้แล้ว',
+    'auth/user-not-found': 'ไม่พบบัญชีที่ใช้อีเมลนี้',
+    'auth/wrong-password': 'รหัสผ่านไม่ถูกต้อง',
+    'auth/invalid-email': 'รูปแบบอีเมลไม่ถูกต้อง',
+    'auth/too-many-requests': 'ลองเข้าสู่ระบบมากเกินไป โปรดลองใหม่ในภายหลัง',
+    'auth/operation-not-allowed': 'การสมัครสมาชิกปิดใช้งานแล้ว',
+    'auth/account-exists-with-different-credential': 'บัญชีมีอยู่แล้ว',
+    'auth/network-request-failed': 'ปัญหาเครือข่าย กรุณาตรวจสอบการเชื่อมต่ออินเทอร์เน็ต',
+    'auth/missing-email': 'กรุณาป้อนอีเมล',
+    'auth/missing-password': 'กรุณาป้อนรหัสผ่าน',
+    'auth/invalid-credential': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+  };
+  
+  return errorMap[errorCode] || error?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
+};
+
 const toErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
-    return error.message;
+    // Try to parse Firebase error codes from the error message
+    return parseFirebaseError(error);
   }
 
-  return 'Something went wrong. Please try again.';
+  return 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
 };
 
 const readUserProfile = async (uid: string, fallbackEmail: string): Promise<UserProfile> => {
@@ -102,7 +125,7 @@ export const useAuthStore = create<AuthState>((set) => ({
           set({
             isAuthReady: true,
             isAuthLoading: false,
-            authError: toErrorMessage(error),
+            authError: parseFirebaseError(error),
           });
         }
       },
@@ -110,7 +133,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         set({
           isAuthReady: true,
           isAuthLoading: false,
-          authError: toErrorMessage(error),
+          authError: parseFirebaseError(error),
         });
       },
     ),
@@ -129,7 +152,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         authError: null,
       });
     } catch (error) {
-      const message = toErrorMessage(error);
+      const message = parseFirebaseError(error);
       set({ isAuthLoading: false, authError: message });
       throw new Error(message);
     }
@@ -151,7 +174,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         authError: null,
       });
     } catch (error) {
-      const message = toErrorMessage(error);
+      const message = parseFirebaseError(error);
       set({ isAuthLoading: false, authError: message });
       throw new Error(message);
     }
@@ -190,7 +213,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         authError: null,
       });
     } catch (error) {
-      const message = toErrorMessage(error);
+      const message = parseFirebaseError(error);
       set({ isAuthLoading: false, authError: message });
       throw new Error(message);
     }
@@ -207,7 +230,7 @@ export const useAuthStore = create<AuthState>((set) => ({
         authError: null,
       });
     } catch (error) {
-      const message = toErrorMessage(error);
+      const message = parseFirebaseError(error);
       set({ isAuthLoading: false, authError: message });
       throw new Error(message);
     }

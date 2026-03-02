@@ -219,13 +219,20 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
     }
 
     if (!currentLocation) {
-      Alert.alert('Location unavailable', 'Please allow location access and try again.');
+      Alert.alert('Location unavailable', 'Please allow location access in Settings and try again.');
       return;
     }
 
     try {
-      const routePoints = await getDirectionsRoute(currentLocation, destination);
-      setRoutePreview(routePoints);
+      // Try to get route preview, but don't fail if it doesn't work
+      let routePoints: Coordinate[] = [currentLocation, destination];
+      try {
+        routePoints = await getDirectionsRoute(currentLocation, destination);
+        setRoutePreview(routePoints);
+      } catch (routeError) {
+        // Use straight line if Directions API fails
+        console.warn('Route preview unavailable:', routeError);
+      }
 
       const tripCode = await createTrip({
         tripName: tripName.trim(),
@@ -256,7 +263,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       const permission = await Location.requestForegroundPermissionsAsync();
 
       if (permission.status !== 'granted') {
-        Alert.alert('Location unavailable', 'Please allow location access and try again.');
+        Alert.alert('Permission denied', 'Please allow location access in Settings to use this feature.');
         return;
       }
 

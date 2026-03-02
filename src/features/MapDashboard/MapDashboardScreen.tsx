@@ -1,7 +1,9 @@
 import * as Location from 'expo-location';
+import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, FlatList, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import MapView, { MapPressEvent, Marker, Polyline } from 'react-native-maps';
+import { ActivityIndicator, Alert, Animated, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import { TextInput } from 'react-native';
+import MapView, { MapPressEvent, Marker, Polyline, Circle } from 'react-native-maps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { geocodeByText, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useTripStore } from '../../core/store/useTripStore';
@@ -29,11 +31,15 @@ export default function MapDashboardScreen({ navigation }: any) {
   const {
     currentTripCode,
     tripName,
+    ownerId,
     members,
     destination,
     destinationAddress,
     routePoints,
     isSOSActive,
+    sosActivatorId,
+    sosActivatorName,
+    sosActivatorLocation,
     currentUserLocation,
     locationMode,
     tripError,
@@ -52,6 +58,22 @@ export default function MapDashboardScreen({ navigation }: any) {
       lastNavigationLocationRef.current = null;
     }
   }, [hasActiveTrip, memberPanelTranslateY]);
+
+  // Trigger vibration when someone else activates SOS (not the person who pressed it)
+  useEffect(() => {
+    if (isSOSActive && sosActivatorName && sosActivatorId && sosActivatorId !== userProfile?.uid) {
+      try {
+        // Vibrate strongly for 15-20 seconds (like incoming call)
+        for (let i = 0; i < 20; i++) { // 20 heavy impacts over ~16 seconds
+          setTimeout(() => {
+            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+          }, i * 800);
+        }
+      } catch {
+        // Vibration not available
+      }
+    }
+  }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
 
   useEffect(() => {
     void startLocationTracking();
@@ -336,12 +358,6 @@ export default function MapDashboardScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, !hasActiveTrip && styles.noTripContainer]}>
-      {hasActiveTrip && isSOSActive ? (
-        <View style={styles.sosBanner}>
-          <Text style={styles.sosText}>🚨 ALERT! Someone needs help! 🚨</Text>
-        </View>
-      ) : null}
-
       {hasActiveTrip && currentTripCode ? (
         <View style={styles.tripCodeBanner}>
           <Text style={styles.tripCodeLabel}>Join code: {currentTripCode}</Text>
@@ -372,7 +388,7 @@ export default function MapDashboardScreen({ navigation }: any) {
             void handleMapPress(event);
           }}
         >
-          {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#FF9500" /> : null}
+          {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#FF3B30" /> : null}
 
           {routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
 
@@ -409,46 +425,98 @@ export default function MapDashboardScreen({ navigation }: any) {
             .filter((member) => member.location)
             .map((member) => {
               const isCurrentUser = member.id === userProfile?.uid;
+              const isHost = member.id === ownerId;
+              const isSOSActivator = isSOSActive && member.id === sosActivatorId;
+
+              // ลำดับสี: SOS > Host > Member
+              let pinColor = '#007AFF'; // สีฟ้า (member ทั่วไป)
+              let titleSuffix = '';
+
+              if (isSOSActivator) {
+                pinColor = '#FF3B30'; // สีแดง (SOS)
+              } else if (isHost) {
+                pinColor = '#FFD60A'; // สีเหลือง (Host)
+                titleSuffix = ' (Host)';
+              }
+
+              if (isCurrentUser && !titleSuffix) {
+                titleSuffix = ' (You)';
+              } else if (isCurrentUser && titleSuffix === ' (Host)') {
+                titleSuffix = ' (You - Host)';
+              }
 
               return (
-                <Marker
-                  key={member.id}
-                  coordinate={member.location!}
-                  title={isCurrentUser ? `${member.name} (You)` : member.name}
-                  description={`Mode: ${member.locationMode.toUpperCase()}`}
-                  pinColor={isCurrentUser ? '#007AFF' : '#34C759'}
-                />
+                <React.Fragment key={member.id}>
+                  {isSOSActivator ? (
+                    <>
+                      <Circle
+                        center={member.location!}
+                        radius={100}
+                        strokeColor="rgba(255, 59, 48, 0.8)"
+                        strokeWidth={3}
+                        fillColor="rgba(255, 59, 48, 0.2)"
+                      />
+                      <Circle
+                        center={member.location!}
+                        radius={50}
+                        strokeColor="rgba(255, 59, 48, 1)"
+                        strokeWidth={2}
+                        fillColor="rgba(255, 59, 48, 0.3)"
+                      />
+                    </>
+                  ) : null}
+                  <Marker
+                    coordinate={member.location!}
+                    title={`${member.name}${titleSuffix}`}
+                    description={isSOSActivator ? '🚨 NEEDS HELP!' : `Mode: ${member.locationMode.toUpperCase()}`}
+                    pinColor={pinColor}
+                  />
+                </React.Fragment>
               );
             })}
         </MapView>
 
         <View style={styles.mapControls}>
-          <View style={styles.searchBox}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search place"
-              placeholderTextColor="#999"
-              value={searchText}
-              onChangeText={(value) => {
-                setSearchText(value);
-              }}
-              onSubmitEditing={() => {
-                void handleSearch();
-              }}
-              returnKeyType="search"
-            />
-            <TouchableOpacity
-              style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
-              onPress={() => {
-                void handleSearch();
-              }}
-              disabled={isSearching}
-            >
-              <Text style={styles.searchButtonText}>{isSearching ? '...' : 'Search'}</Text>
-            </TouchableOpacity>
-          </View>
+          {isSOSActive && hasActiveTrip ? (
+            <View style={[styles.searchBox, { backgroundColor: '#FF3B30', borderColor: '#FF3B30', paddingVertical: 12, paddingHorizontal: 14 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 }}>
+                  🚨 {sosActivatorName} needs help!
+                </Text>
+                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
+                  {sosActivatorLocation ? `${sosActivatorLocation.latitude.toFixed(5)}, ${sosActivatorLocation.longitude.toFixed(5)}` : 'Locating...'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  void triggerSOS(false);
+                }}
+                style={{ paddingLeft: 8 }}
+              >
+                <Text style={{ fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.searchBox}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search destination..."
+                returnKeyType="search"
+                value={searchText}
+                onSubmitEditing={handleSearch}
+                onChangeText={setSearchText}
+              />
+              <TouchableOpacity
+                style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
+                onPress={handleSearch}
+                disabled={isSearching}
+              >
+                <Text style={styles.searchButtonText}>{isSearching ? '...' : 'Search'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-          {(isSuggestionLoading || suggestions.length > 0) && !isSearching ? (
+          {!isSOSActive && (isSuggestionLoading || suggestions.length > 0) && !isSearching ? (
             <View style={styles.suggestionList}>
               {isSuggestionLoading ? (
                 <View style={styles.suggestionLoadingRow}>
@@ -544,8 +612,12 @@ export default function MapDashboardScreen({ navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.sosBtn, isSOSActive && styles.sosBtnActive]}
-            onPress={() => {
-              void triggerSOS(!isSOSActive);
+            onPress={async () => {
+              const newSOSState = !isSOSActive;
+              await triggerSOS(newSOSState);
+              
+              // No vibration for the person who presses SOS
+              // Other members will vibrate via useEffect
             }}
           >
             <Text style={styles.sosBtnText}>{isSOSActive ? '✅ Cancel SOS' : '🚨 SOS'}</Text>

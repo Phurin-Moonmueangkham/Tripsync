@@ -23,10 +23,11 @@ type SuggestionOptions = {
 };
 
 const getGoogleMapsApiKey = (): string => {
-  const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY
+    || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   if (!key) {
-    throw new Error('Missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in .env');
+    throw new Error('Missing EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) in .env');
   }
 
   return key;
@@ -106,6 +107,13 @@ export const getPlaceSuggestions = async (query: string, options?: SuggestionOpt
   const apiKey = getGoogleMapsApiKey();
   const language = options?.language?.trim() || 'th';
   const radius = options?.radiusMeters ?? 30000;
+  const manualSuggestion: PlaceSuggestion = {
+    placeId: `manual:${trimmedQuery}`,
+    mainText: trimmedQuery,
+    secondaryText: 'Tap to search this location',
+    fullText: trimmedQuery,
+    isFallback: true,
+  };
   const locationBias = options?.location
     ? `&location=${options.location.latitude},${options.location.longitude}&radius=${radius}`
     : '';
@@ -119,19 +127,21 @@ export const getPlaceSuggestions = async (query: string, options?: SuggestionOpt
     }
 
     if (payload.status === 'ZERO_RESULTS') {
-      return [];
+      return [manualSuggestion];
     }
 
     if (payload.status !== 'OK') {
       throw new Error(payload?.error_message || payload.status || 'Autocomplete request failed.');
     }
 
-    return payload.predictions.slice(0, 6).map((prediction: any) => ({
+    const mapped = payload.predictions.slice(0, 6).map((prediction: any) => ({
       placeId: String(prediction.place_id ?? ''),
       mainText: String(prediction.structured_formatting?.main_text ?? prediction.description ?? ''),
       secondaryText: String(prediction.structured_formatting?.secondary_text ?? ''),
       fullText: String(prediction.description ?? ''),
     }));
+
+    return mapped.length > 0 ? mapped : [manualSuggestion];
   } catch {
     try {
       const geocode = await geocodeByText(trimmedQuery);
@@ -146,7 +156,7 @@ export const getPlaceSuggestions = async (query: string, options?: SuggestionOpt
         },
       ];
     } catch {
-      return [];
+      return [manualSuggestion];
     }
   }
 };

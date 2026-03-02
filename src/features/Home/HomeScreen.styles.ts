@@ -16,7 +16,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     paddingVertical: 16,
-    paddingBottom: 36,
+    paddingBottom: 50,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#eee',

@@ -39,11 +39,15 @@ type CreateTripPayload = {
 interface TripState {
   currentTripCode: string | null;
   tripName: string;
+  ownerId: string | null;
   destination: Coordinate | null;
   destinationAddress: string;
   routePoints: Coordinate[];
   members: Member[];
   isSOSActive: boolean;
+  sosActivatorId: string | null;
+  sosActivatorName: string | null;
+  sosActivatorLocation: Coordinate | null;
   locationMode: LocationMode;
   currentUserLocation: Coordinate | null;
   isTripLoading: boolean;
@@ -161,6 +165,7 @@ const subscribeTripData = (tripCode: string, set: (partial: Partial<TripState>) 
     set({
       currentTripCode: tripCode,
       tripName: typeof data.tripName === 'string' ? data.tripName : 'Unknown Trip',
+      ownerId: typeof data.ownerId === 'string' ? data.ownerId : null,
       destination: toCoordinate(data.destination),
       destinationAddress: typeof data.destinationAddress === 'string' ? data.destinationAddress : '',
       routePoints: Array.isArray(data.routePoints)
@@ -169,6 +174,9 @@ const subscribeTripData = (tripCode: string, set: (partial: Partial<TripState>) 
             .filter((point): point is Coordinate => point !== null)
         : [],
       isSOSActive: Boolean(data.isSOSActive),
+      sosActivatorId: typeof data.sosActivatorId === 'string' ? data.sosActivatorId : null,
+      sosActivatorName: typeof data.sosActivatorName === 'string' ? data.sosActivatorName : null,
+      sosActivatorLocation: toCoordinate(data.sosActivatorLocation),
       isTripLoading: false,
       tripError: null,
     });
@@ -201,11 +209,15 @@ const subscribeTripData = (tripCode: string, set: (partial: Partial<TripState>) 
 const baseState: Omit<TripState, 'createTrip' | 'joinTrip' | 'leaveTrip' | 'triggerSOS' | 'setLocationMode' | 'startLocationTracking' | 'stopLocationTracking' | 'clearTripError'> = {
   currentTripCode: null,
   tripName: '',
+  ownerId: null,
   destination: null,
   destinationAddress: '',
   routePoints: [],
   members: [],
   isSOSActive: false,
+  sosActivatorId: null,
+  sosActivatorName: null,
+  sosActivatorLocation: null,
   locationMode: 'balanced',
   currentUserLocation: null,
   isTripLoading: false,
@@ -261,10 +273,14 @@ export const useTripStore = create<TripState>((set, get) => ({
       set({
         currentTripCode: tripCode,
         tripName: cleanTripName,
+        ownerId: firebaseUser.uid,
         destination,
         destinationAddress,
         routePoints,
         isSOSActive: false,
+        sosActivatorId: null,
+        sosActivatorName: null,
+        sosActivatorLocation: null,
         isTripLoading: false,
         tripError: null,
       });
@@ -346,18 +362,28 @@ export const useTripStore = create<TripState>((set, get) => ({
   },
   triggerSOS: async (isActive) => {
     const tripCode = get().currentTripCode;
+    const firebaseUser = auth.currentUser;
+    const currentUserLocation = get().currentUserLocation;
 
-    if (!tripCode) {
+    if (!tripCode || !firebaseUser) {
       return;
     }
 
-    set({ isSOSActive: isActive });
+    set({
+      isSOSActive: isActive,
+      sosActivatorId: isActive ? firebaseUser.uid : null,
+      sosActivatorName: isActive ? (firebaseUser.displayName ?? 'Unknown') : null,
+      sosActivatorLocation: isActive ? currentUserLocation : null,
+    });
 
     try {
       await setDoc(
         doc(db, 'trips', tripCode),
         {
           isSOSActive: isActive,
+          sosActivatorId: isActive ? firebaseUser.uid : null,
+          sosActivatorName: isActive ? (firebaseUser.displayName ?? 'Unknown') : null,
+          sosActivatorLocation: isActive ? currentUserLocation : null,
           updatedAt: serverTimestamp(),
         },
         { merge: true },

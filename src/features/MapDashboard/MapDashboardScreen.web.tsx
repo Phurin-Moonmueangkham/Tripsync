@@ -1,7 +1,7 @@
 import * as Location from 'expo-location';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Linking, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { geocodeByText, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion } from '../../core/maps/googleMaps';
+import { geocodeByText, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { useTripStore } from '../../core/store/useTripStore';
 import { styles } from './MapDashboard.styles';
@@ -13,16 +13,24 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [isLocating, setIsLocating] = useState(false);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searchedLocation, setSearchedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [droppedPinLocation, setDroppedPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [droppedPinAddress, setDroppedPinAddress] = useState<string>('');
   const [isInAppNavigation, setIsInAppNavigation] = useState(false);
+  const mapRef = useRef<google.maps.Map | null>(null);
+  const mapContainerRef = useRef<HTMLDivElement>(null);
 
   const userProfile = useAuthStore((state) => state.userProfile);
   const {
     currentTripCode,
     tripName,
+    ownerId,
     members,
     destination,
     destinationAddress,
     isSOSActive,
+    sosActivatorId,
+    sosActivatorName,
+    sosActivatorLocation,
     currentUserLocation,
     locationMode,
     tripError,
@@ -40,6 +48,74 @@ export default function MapDashboardScreen({ navigation }: any) {
       void stopLocationTracking();
     };
   }, [startLocationTracking, stopLocationTracking, locationMode]);
+
+  // Initialize Google Maps
+  useEffect(() => {
+    const initMap = async () => {
+      if (!mapContainerRef.current || mapRef.current) {
+        return;
+      }
+
+      const apiKey = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+      if (!apiKey) {
+        return;
+      }
+
+      // Load Google Maps script
+      const script = document.createElement('script');
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+      script.async = true;
+      script.defer = true;
+      
+      script.onload = () => {
+        if (!mapContainerRef.current) return;
+
+        const center = activeLocation || { lat: 13.7563, lng: 100.5018 };
+        
+        const map = new google.maps.Map(mapContainerRef.current, {
+          center: { lat: center.latitude || center.lat, lng: center.longitude || center.lng },
+          zoom: 14,
+          mapTypeControl: true,
+        });
+
+        mapRef.current = map;
+
+        // Add click listener
+        map.addListener('click', (e: google.maps.MapMouseEvent) => {
+          if (hasActiveTrip || !e.latLng) return;
+
+          const coordinate = {
+            latitude: e.latLng.lat(),
+            longitude: e.latLng.lng(),
+          };
+
+          setDroppedPinLocation(coordinate);
+          
+          reverseGeocode(coordinate)
+            .then((address) => {
+              setDroppedPinAddress(address);
+            })
+            .catch(() => {
+              setDroppedPinAddress(`${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`);
+            });
+        });
+      };
+
+      document.head.appendChild(script);
+    };
+
+    initMap();
+  }, [hasActiveTrip, activeLocation]);
+
+  // Update map center when active location changes
+  useEffect(() => {
+    if (mapRef.current && activeLocation) {
+      mapRef.current.panTo({
+        lat: activeLocation.latitude,
+        lng: activeLocation.longitude,
+      });
+    }
+  }, [activeLocation]);
 
   useEffect(() => {
     const query = searchText.trim();
@@ -72,7 +148,25 @@ export default function MapDashboardScreen({ navigation }: any) {
     };
   }, [currentUserLocation, searchText]);
 
+  // Trigger vibration when someone else activates SOS (not the person who pressed it)
+  useEffect(() => {
+    if (isSOSActive && sosActivatorName && sosActivatorId && sosActivatorId !== userProfile?.uid) {
+      if (window.navigator?.vibrate) {
+        // Vibrate strongly for 15-20 seconds (like incoming call): vibrate 1000ms, pause 500ms
+        const pattern = [];
+        for (let i = 0; i < 12; i++) { // 12 cycles = 18 seconds
+          pattern.push(1000, 500);
+        }
+        window.navigator.vibrate(pattern);
+      }
+    }
+  }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
+
   const activeLocation = useMemo(() => {
+    if (droppedPinLocation) {
+      return droppedPinLocation;
+    }
+
     if (searchedLocation) {
       return searchedLocation;
     }
@@ -82,7 +176,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     return currentUserLocation;
-  }, [currentUserLocation, destination, searchedLocation]);
+  }, [currentUserLocation, destination, searchedLocation, droppedPinLocation]);
 
   const handleSearch = async () => {
     const query = searchText.trim();
@@ -157,13 +251,16 @@ export default function MapDashboardScreen({ navigation }: any) {
   };
 
   const handleCreateTripFromSearch = () => {
-    if (!searchedLocation || hasActiveTrip) {
+    const location = droppedPinLocation || searchedLocation;
+    const address = droppedPinAddress || searchText.trim();
+
+    if (!location || hasActiveTrip) {
       return;
     }
 
     navigation.navigate('CreateTrip', {
-      prefillDestination: searchedLocation,
-      prefillAddress: searchText.trim(),
+      prefillDestination: location,
+      prefillAddress: address,
     });
   };
 
@@ -185,17 +282,13 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     setIsInAppNavigation(true);
-    Alert.alert('เริ่มโหมดนำทาง', 'สำหรับเว็บ ระบบจะเปิดนำทางผ่าน Google Maps ภายนอก');
+    const url = `https://www.google.com/maps/dir/?api=1&origin=${currentUserLocation.latitude},${currentUserLocation.longitude}&destination=${destination.latitude},${destination.longitude}&travelmode=driving`;
+    Linking.openURL(url);
+    Alert.alert('เปิดนำทาง', 'เปิด Google Maps เพื่อนำทางไปยังปลายทาง');
   };
 
   return (
     <SafeAreaView style={[styles.container, !hasActiveTrip && styles.noTripContainer]}>
-      {hasActiveTrip && isSOSActive ? (
-        <View style={styles.sosBanner}>
-          <Text style={styles.sosText}>🚨 ALERT! Someone needs help! 🚨</Text>
-        </View>
-      ) : null}
-
       {hasActiveTrip && currentTripCode ? (
         <View style={styles.tripCodeBanner}>
           <Text style={styles.tripCodeLabel}>Join code: {currentTripCode}</Text>
@@ -216,53 +309,55 @@ export default function MapDashboardScreen({ navigation }: any) {
       ) : null}
 
       <View style={hasActiveTrip ? styles.mapCard : styles.mapFullScreen}>
-        <View style={[hasActiveTrip ? styles.map : styles.fullMap, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF3FA' }]}>
-          <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A2E' }}>Web Map Mode</Text>
-          <Text style={{ marginTop: 8, color: '#4F5B6B', textAlign: 'center', paddingHorizontal: 20 }}>
-            ใช้การค้นหาสถานที่และเปิดเส้นทางผ่าน Google Maps ได้บนเว็บ
-          </Text>
-          {activeLocation ? (
-            <Text style={{ marginTop: 8, color: '#4F5B6B' }}>
-              {activeLocation.latitude.toFixed(5)}, {activeLocation.longitude.toFixed(5)}
-            </Text>
-          ) : null}
-          <TouchableOpacity style={[styles.searchButton, { marginTop: 14 }]} onPress={() => { void handleOpenExternalMap(); }}>
-            <Text style={styles.searchButtonText}>Open in Google Maps</Text>
-          </TouchableOpacity>
-          {!hasActiveTrip && searchedLocation ? (
-            <TouchableOpacity style={[styles.mapTypeButton, { marginTop: 10, alignSelf: 'center' }]} onPress={handleCreateTripFromSearch}>
-              <Text style={styles.mapTypeButtonText}>Create trip from this location</Text>
-            </TouchableOpacity>
-          ) : null}
-        </View>
+        <div
+          ref={mapContainerRef}
+          style={{
+            width: '100%',
+            height: '100%',
+          }}
+        />
 
         <View style={styles.mapControls}>
-          <View style={styles.searchBox}>
-            <TextInput
-              style={styles.searchInput}
-              placeholder="Search place"
-              placeholderTextColor="#999"
-              value={searchText}
-              onChangeText={(value) => {
-                setSearchText(value);
-              }}
-              onSubmitEditing={() => {
-                void handleSearch();
-              }}
-              returnKeyType="search"
-            />
-            <TouchableOpacity
-              style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
-              onPress={() => {
-                void handleSearch();
-              }}
-              disabled={isSearching}
-            >
-              <Text style={styles.searchButtonText}>{isSearching ? '...' : 'Search'}</Text>
-            </TouchableOpacity>
-          </View>
+          {isSOSActive && hasActiveTrip ? (
+            <View style={[styles.searchBox, { backgroundColor: '#FF3B30', borderColor: '#FF3B30', paddingVertical: 12, paddingHorizontal: 14 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 }}>
+                  🚨 {sosActivatorName} needs help!
+                </Text>
+                <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
+                  {sosActivatorLocation ? `${sosActivatorLocation.latitude.toFixed(5)}, ${sosActivatorLocation.longitude.toFixed(5)}` : 'Locating...'}
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => {
+                  void triggerSOS(false);
+                }}
+                style={{ paddingLeft: 8 }}
+              >
+                <Text style={{ fontSize: 18 }}>✕</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <View style={styles.searchBox}>
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search destination..."
+                returnKeyType="search"
+                value={searchText}
+                onSubmitEditing={handleSearch}
+                onChangeText={setSearchText}
+              />
+              <TouchableOpacity
+                style={[styles.searchButton, isSearching && styles.searchButtonDisabled]}
+                onPress={handleSearch}
+                disabled={isSearching}
+              >
+                <Text style={styles.searchButtonText}>{isSearching ? '...' : 'Search'}</Text>
+              </TouchableOpacity>
+            </View>
+          )}
 
-          {(isSuggestionLoading || suggestions.length > 0) && !isSearching ? (
+          {!isSOSActive && (isSuggestionLoading || suggestions.length > 0) && !isSearching ? (
             <View style={styles.suggestionList}>
               {isSuggestionLoading ? (
                 <View style={styles.suggestionLoadingRow}>
@@ -294,6 +389,23 @@ export default function MapDashboardScreen({ navigation }: any) {
           >
             {isLocating ? <ActivityIndicator size="small" color="#1A1A2E" /> : <Text style={styles.locateButtonIcon}>⌖</Text>}
           </TouchableOpacity>
+
+          {!hasActiveTrip && (droppedPinLocation || searchedLocation) ? (
+            <TouchableOpacity style={[styles.locateButton, { bottom: 80 }]} onPress={handleCreateTripFromSearch}>
+              <Text style={styles.locateButtonIcon}>➕</Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {activeLocation ? (
+            <TouchableOpacity
+              style={[styles.locateButton, { bottom: (droppedPinLocation || searchedLocation) && !hasActiveTrip ? 140 : 80, backgroundColor: '#007AFF' }]}
+              onPress={() => {
+                void handleOpenExternalMap();
+              }}
+            >
+              <Text style={[styles.locateButtonIcon, { color: '#fff' }]}>🗺️</Text>
+            </TouchableOpacity>
+          ) : null}
         </View>
       </View>
 
@@ -306,8 +418,19 @@ export default function MapDashboardScreen({ navigation }: any) {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.sosBtn, isSOSActive && styles.sosBtnActive]}
-            onPress={() => {
-              void triggerSOS(!isSOSActive);
+            onPress={async () => {
+              const newSOSState = !isSOSActive;
+              await triggerSOS(newSOSState);
+              
+              // Trigger vibration for all members (web uses different vibration API)
+              // Vibrate strongly for 15-20 seconds (like incoming call)
+              if (newSOSState && window.navigator?.vibrate) {
+                const pattern = [];
+                for (let i = 0; i < 12; i++) { // 12 cycles = 18 seconds
+                  pattern.push(1000, 500);
+                }
+                window.navigator.vibrate(pattern);
+              }
             }}
           >
             <Text style={styles.sosBtnText}>{isSOSActive ? '✅ Cancel SOS' : '🚨 SOS'}</Text>
