@@ -358,12 +358,6 @@ export default function MapDashboardScreen({ navigation }: any) {
 
   return (
     <SafeAreaView style={[styles.container, !hasActiveTrip && styles.noTripContainer]}>
-      {hasActiveTrip && currentTripCode ? (
-        <View style={styles.tripCodeBanner}>
-          <Text style={styles.tripCodeLabel}>Join code: {currentTripCode}</Text>
-        </View>
-      ) : null}
-
       {hasActiveTrip ? (
         <View style={styles.header}>
           <View>

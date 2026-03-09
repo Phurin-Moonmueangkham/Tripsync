@@ -2,8 +2,10 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { ActivityIndicator, View } from 'react-native';
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useAuthStore } from './src/core/store/useAuthStore';
+import { useTripStore } from './src/core/store/useTripStore';
+import { getStoredTripCode } from './src/core/store/useTripStore';
 
 // Import หน้าจอทั้งหมดจากโฟลเดอร์ features
 import AuthChoiceScreen from './src/features/Auth/AuthChoiceScreen';
@@ -23,12 +25,33 @@ export default function App() {
   const userProfile = useAuthStore((state) => state.userProfile);
   const isAuthReady = useAuthStore((state) => state.isAuthReady);
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
+  const navigationRef = useRef<any>(null);
 
   useEffect(() => {
     const unsubscribe = initializeAuth();
 
     return unsubscribe;
   }, [initializeAuth]);
+
+  useEffect(() => {
+    // If auth is ready and user is logged in, check if there's an active trip
+    if (isAuthReady && userProfile) {
+      const storedTripCode = getStoredTripCode();
+      if (storedTripCode) {
+        // Join the trip automatically
+        const joinTrip = useTripStore.getState().joinTrip;
+        joinTrip(storedTripCode).catch(() => {
+          // If join fails, the trip might have been deleted
+          // User will see error in MapDashboard
+        });
+        
+        // Navigate to MapDashboard
+        if (navigationRef.current) {
+          navigationRef.current.navigate('MapDashboard');
+        }
+      }
+    }
+  }, [isAuthReady, userProfile]);
 
   if (!isAuthReady) {
     return (
@@ -39,8 +62,8 @@ export default function App() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator id="root-stack">
+    <NavigationContainer ref={navigationRef}>
+      <Stack.Navigator id="root-stack" screenOptions={{ headerTintColor: '#007AFF' }}>
         {userProfile ? (
           <>
             <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />

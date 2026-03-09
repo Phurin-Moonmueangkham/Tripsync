@@ -8,6 +8,7 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import { create } from 'zustand';
 import { auth, db } from '../firebase/firebase';
@@ -36,12 +37,22 @@ type CreateTripPayload = {
   routePoints: Coordinate[];
 };
 
+type ReachMap = Record<string, boolean>;
+
 interface TripState {
   currentTripCode: string | null;
   tripName: string;
   ownerId: string | null;
   destination: Coordinate | null;
   destinationAddress: string;
+  meetingPoint: Coordinate | null;
+  meetingPointAddress: string;
+  meetingPointSetterId: string | null;
+  meetingPointSetterName: string | null;
+  meetingPointSetAtMs: number | null;
+  meetingReachedBy: ReachMap;
+  destinationReachedBy: ReachMap;
+  isTripCompleted: boolean;
   routePoints: Coordinate[];
   members: Member[];
   isSOSActive: boolean;
@@ -56,6 +67,11 @@ interface TripState {
   createTrip: (payload: CreateTripPayload) => Promise<string>;
   joinTrip: (tripCode: string) => Promise<void>;
   leaveTrip: () => Promise<void>;
+  setMeetingPoint: (payload: { coordinate: Coordinate; address: string }) => Promise<void>;
+  clearMeetingPoint: () => Promise<void>;
+  markMeetingReached: () => Promise<void>;
+  markDestinationReached: () => Promise<void>;
+  completeTrip: () => Promise<void>;
   triggerSOS: (isActive: boolean) => Promise<void>;
   setLocationMode: (mode: LocationMode) => Promise<void>;
   startLocationTracking: () => Promise<void>;
@@ -70,6 +86,38 @@ let tripUnsubscribe: (() => void) | null = null;
 let membersUnsubscribe: (() => void) | null = null;
 let locationSubscription: Location.LocationSubscription | null = null;
 let smartTrackingInterval: ReturnType<typeof setInterval> | null = null;
+
+// localStorage helpers for persistence
+const saveTripCodeToStorage = (tripCode: string) => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('activeTripCode', tripCode);
+    }
+  } catch {
+    // Silently fail if localStorage is not available
+  }
+};
+
+const clearTripCodeFromStorage = () => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.removeItem('activeTripCode');
+    }
+  } catch {
+    // Silently fail if localStorage is not available
+  }
+};
+
+export const getStoredTripCode = (): string | null => {
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      return window.localStorage.getItem('activeTripCode');
+    }
+  } catch {
+    // Silently fail if localStorage is not available
+  }
+  return null;
+};
 
 const toErrorMessage = (error: unknown): string => {
   const errorCode = typeof error === 'object' && error !== null && 'code' in error
@@ -149,6 +197,18 @@ const toCoordinate = (input: unknown): Coordinate | null => {
   return { latitude, longitude };
 };
 
+const toReachMap = (input: unknown): ReachMap => {
+  if (!input || typeof input !== 'object') {
+    return {};
+  }
+
+  const entries = Object.entries(input as Record<string, unknown>)
+    .filter(([, value]) => value === true)
+    .map(([key]) => [key, true] as const);
+
+  return Object.fromEntries(entries) as ReachMap;
+};
+
 const getCurrentBatteryLevel = async (): Promise<number> => {
   try {
     const batteryLevel = await Battery.getBatteryLevelAsync();
@@ -182,6 +242,14 @@ const subscribeTripData = (tripCode: string, set: (partial: Partial<TripState>) 
       ownerId: typeof data.ownerId === 'string' ? data.ownerId : null,
       destination: toCoordinate(data.destination),
       destinationAddress: typeof data.destinationAddress === 'string' ? data.destinationAddress : '',
+      meetingPoint: toCoordinate(data.meetingPoint),
+      meetingPointAddress: typeof data.meetingPointAddress === 'string' ? data.meetingPointAddress : '',
+      meetingPointSetterId: typeof data.meetingPointSetterId === 'string' ? data.meetingPointSetterId : null,
+      meetingPointSetterName: typeof data.meetingPointSetterName === 'string' ? data.meetingPointSetterName : null,
+      meetingPointSetAtMs: typeof data.meetingPointSetAtMs === 'number' ? data.meetingPointSetAtMs : null,
+      meetingReachedBy: toReachMap(data.meetingReachedBy),
+      destinationReachedBy: toReachMap(data.destinationReachedBy),
+      isTripCompleted: Boolean(data.isTripCompleted),
       routePoints: Array.isArray(data.routePoints)
         ? data.routePoints
             .map((point) => toCoordinate(point))
@@ -220,12 +288,20 @@ const subscribeTripData = (tripCode: string, set: (partial: Partial<TripState>) 
   });
 };
 
-const baseState: Omit<TripState, 'createTrip' | 'joinTrip' | 'leaveTrip' | 'triggerSOS' | 'setLocationMode' | 'startLocationTracking' | 'stopLocationTracking' | 'clearTripError'> = {
+const baseState: Omit<TripState, 'createTrip' | 'joinTrip' | 'leaveTrip' | 'setMeetingPoint' | 'clearMeetingPoint' | 'markMeetingReached' | 'markDestinationReached' | 'completeTrip' | 'triggerSOS' | 'setLocationMode' | 'startLocationTracking' | 'stopLocationTracking' | 'clearTripError'> = {
   currentTripCode: null,
   tripName: '',
   ownerId: null,
   destination: null,
   destinationAddress: '',
+  meetingPoint: null,
+  meetingPointAddress: '',
+  meetingPointSetterId: null,
+  meetingPointSetterName: null,
+  meetingPointSetAtMs: null,
+  meetingReachedBy: {},
+  destinationReachedBy: {},
+  isTripCompleted: false,
   routePoints: [],
   members: [],
   isSOSActive: false,
@@ -261,6 +337,14 @@ export const useTripStore = create<TripState>((set, get) => ({
         tripName: cleanTripName,
         destination,
         destinationAddress,
+        meetingPoint: null,
+        meetingPointAddress: '',
+        meetingPointSetterId: null,
+        meetingPointSetterName: null,
+        meetingPointSetAtMs: null,
+        meetingReachedBy: {},
+        destinationReachedBy: {},
+        isTripCompleted: false,
         routePoints,
         ownerId: firebaseUser.uid,
         isSOSActive: false,
@@ -284,12 +368,22 @@ export const useTripStore = create<TripState>((set, get) => ({
 
       subscribeTripData(tripCode, (partial) => set(partial));
 
+      saveTripCodeToStorage(tripCode);
+
       set({
         currentTripCode: tripCode,
         tripName: cleanTripName,
         ownerId: firebaseUser.uid,
         destination,
         destinationAddress,
+        meetingPoint: null,
+        meetingPointAddress: '',
+        meetingPointSetterId: null,
+        meetingPointSetterName: null,
+        meetingPointSetAtMs: null,
+        meetingReachedBy: {},
+        destinationReachedBy: {},
+        isTripCompleted: false,
         routePoints,
         isSOSActive: false,
         sosActivatorId: null,
@@ -324,6 +418,11 @@ export const useTripStore = create<TripState>((set, get) => ({
         throw new Error('Trip code not found.');
       }
 
+      if (tripSnapshot.data().isTripCompleted) {
+        clearTripCodeFromStorage();
+        throw new Error('Trip already ended.');
+      }
+
       await setDoc(
         doc(db, 'trips', normalizedCode, 'members', firebaseUser.uid),
         {
@@ -339,6 +438,8 @@ export const useTripStore = create<TripState>((set, get) => ({
       );
 
       subscribeTripData(normalizedCode, (partial) => set(partial));
+
+      saveTripCodeToStorage(normalizedCode);
 
       set({
         currentTripCode: normalizedCode,
@@ -364,6 +465,7 @@ export const useTripStore = create<TripState>((set, get) => ({
       }
 
       clearFirestoreSubscriptions();
+      clearTripCodeFromStorage();
 
       set({
         ...baseState,
@@ -372,6 +474,169 @@ export const useTripStore = create<TripState>((set, get) => ({
       const message = toErrorMessage(error);
       set({ isTripLoading: false, tripError: message });
       throw new Error(message);
+    }
+  },
+  setMeetingPoint: async ({ coordinate, address }) => {
+    const tripCode = get().currentTripCode;
+    const firebaseUser = auth.currentUser;
+    const ownerId = get().ownerId;
+
+    if (!tripCode || !firebaseUser) {
+      throw new Error('Trip is not active.');
+    }
+
+    if (!ownerId || firebaseUser.uid !== ownerId) {
+      throw new Error('Only trip owner can set the meeting point.');
+    }
+
+    const setterName = firebaseUser.displayName ?? 'Member';
+
+    set({
+      meetingPoint: coordinate,
+      meetingPointAddress: address,
+      meetingPointSetterId: firebaseUser.uid,
+      meetingPointSetterName: setterName,
+      meetingPointSetAtMs: Date.now(),
+      meetingReachedBy: {},
+      tripError: null,
+    });
+
+    try {
+      await setDoc(
+        doc(db, 'trips', tripCode),
+        {
+          meetingPoint: coordinate,
+          meetingPointAddress: address,
+          meetingPointSetterId: firebaseUser.uid,
+          meetingPointSetterName: setterName,
+          meetingPointSetAtMs: Date.now(),
+          meetingReachedBy: {},
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (error) {
+      set({ tripError: toErrorMessage(error) });
+      throw error;
+    }
+  },
+  clearMeetingPoint: async () => {
+    const tripCode = get().currentTripCode;
+    const firebaseUser = auth.currentUser;
+    const ownerId = get().ownerId;
+
+    if (!tripCode || !firebaseUser) {
+      return;
+    }
+
+    if (!ownerId || firebaseUser.uid !== ownerId) {
+      throw new Error('Only trip owner can cancel the meeting point.');
+    }
+
+    set({
+      meetingPoint: null,
+      meetingPointAddress: '',
+      meetingPointSetterId: null,
+      meetingPointSetterName: null,
+      meetingPointSetAtMs: null,
+      meetingReachedBy: {},
+      tripError: null,
+    });
+
+    try {
+      await setDoc(
+        doc(db, 'trips', tripCode),
+        {
+          meetingPoint: null,
+          meetingPointAddress: '',
+          meetingPointSetterId: null,
+          meetingPointSetterName: null,
+          meetingPointSetAtMs: null,
+          meetingReachedBy: {},
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (error) {
+      set({ tripError: toErrorMessage(error) });
+      throw error;
+    }
+  },
+  markMeetingReached: async () => {
+    const tripCode = get().currentTripCode;
+    const firebaseUser = auth.currentUser;
+
+    if (!tripCode || !firebaseUser) {
+      return;
+    }
+
+    const uid = firebaseUser.uid;
+
+    set({
+      meetingReachedBy: {
+        ...get().meetingReachedBy,
+        [uid]: true,
+      },
+    });
+
+    try {
+      await updateDoc(doc(db, 'trips', tripCode), {
+        [`meetingReachedBy.${uid}`]: true,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      set({ tripError: toErrorMessage(error) });
+    }
+  },
+  markDestinationReached: async () => {
+    const tripCode = get().currentTripCode;
+    const firebaseUser = auth.currentUser;
+
+    if (!tripCode || !firebaseUser) {
+      return;
+    }
+
+    const uid = firebaseUser.uid;
+
+    set({
+      destinationReachedBy: {
+        ...get().destinationReachedBy,
+        [uid]: true,
+      },
+    });
+
+    try {
+      await updateDoc(doc(db, 'trips', tripCode), {
+        [`destinationReachedBy.${uid}`]: true,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      set({ tripError: toErrorMessage(error) });
+    }
+  },
+  completeTrip: async () => {
+    const tripCode = get().currentTripCode;
+
+    if (!tripCode) {
+      return;
+    }
+
+    try {
+      await setDoc(
+        doc(db, 'trips', tripCode),
+        {
+          isTripCompleted: true,
+          meetingPoint: null,
+          meetingPointAddress: '',
+          meetingPointSetterId: null,
+          meetingPointSetterName: null,
+          meetingPointSetAtMs: null,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+    } catch (error) {
+      set({ tripError: toErrorMessage(error) });
     }
   },
   triggerSOS: async (isActive) => {

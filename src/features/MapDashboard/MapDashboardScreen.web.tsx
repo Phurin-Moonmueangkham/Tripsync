@@ -2,13 +2,14 @@ import * as Location from 'expo-location';
 import maplibregl from 'maplibre-gl';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Linking, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { geocodeByText, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
+import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { useTripStore } from '../../core/store/useTripStore';
 import { styles } from './MapDashboard.styles';
 
 const MAP_SOURCE_ID = 'trip-points-source';
 const MAP_LAYER_ID = 'trip-points-layer';
+const MAP_MEETING_HALO_LAYER_ID = 'trip-points-meeting-halo-layer';
 const MAP_LABEL_LAYER_ID = 'trip-points-label-layer';
 const ROUTE_SOURCE_ID = 'trip-route-source';
 const ROUTE_LAYER_ID = 'trip-route-layer';
@@ -32,6 +33,20 @@ const OSM_STYLE: maplibregl.StyleSpecification = {
   ],
 };
 
+const getDistanceMeters = (
+  from: { latitude: number; longitude: number },
+  to: { latitude: number; longitude: number },
+): number => {
+  const toRad = (value: number) => value * Math.PI / 180;
+  const earthRadius = 6371000;
+  const dLat = toRad(to.latitude - from.latitude);
+  const dLng = toRad(to.longitude - from.longitude);
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos(toRad(from.latitude)) * Math.cos(toRad(to.latitude)) * Math.sin(dLng / 2) ** 2;
+
+  return 2 * earthRadius * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+};
+
 export default function MapDashboardScreen({ navigation }: any) {
   const [searchText, setSearchText] = useState('');
   const [isSearching, setIsSearching] = useState(false);
@@ -42,9 +57,17 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [droppedPinLocation, setDroppedPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [droppedPinAddress, setDroppedPinAddress] = useState<string>('');
   const [isInAppNavigation, setIsInAppNavigation] = useState(false);
+  const [isMemberPanelExpanded, setIsMemberPanelExpanded] = useState(false);
+  const [isCodeModalVisible, setIsCodeModalVisible] = useState(false);
+  const [isSearchBoxExpanded, setIsSearchBoxExpanded] = useState(false);
+  const [meetingRoutePoints, setMeetingRoutePoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
+  const [isMeetingGuideActive, setIsMeetingGuideActive] = useState(false);
+  const [dismissedMeetingAlertKey, setDismissedMeetingAlertKey] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const hasActiveTripRef = useRef(false);
+  const autoNavigatedMeetingKeyRef = useRef<string | null>(null);
+  const completedAlertShownRef = useRef(false);
 
   const userProfile = useAuthStore((state) => state.userProfile);
   const {
@@ -54,6 +77,14 @@ export default function MapDashboardScreen({ navigation }: any) {
     members,
     destination,
     destinationAddress,
+    meetingPoint,
+    meetingPointAddress,
+    meetingPointSetAtMs,
+    meetingPointSetterId,
+    meetingPointSetterName,
+    meetingReachedBy,
+    destinationReachedBy,
+    isTripCompleted,
     routePoints,
     isSOSActive,
     sosActivatorId,
@@ -65,13 +96,60 @@ export default function MapDashboardScreen({ navigation }: any) {
     triggerSOS,
     startLocationTracking,
     stopLocationTracking,
+    markMeetingReached,
+    markDestinationReached,
+    completeTrip,
+    leaveTrip,
   } = useTripStore();
 
   const hasActiveTrip = Boolean(currentTripCode);
+  const currentUid = userProfile?.uid ?? null;
+  const meetingKey = `${meetingPointSetterId ?? 'none'}-${meetingPointSetAtMs ?? 0}`;
+  const isCurrentUserMeetingSetter = Boolean(currentUid && meetingPointSetterId && currentUid === meetingPointSetterId);
+  const hasReachedMeeting = Boolean(currentUid && meetingReachedBy[currentUid]);
+  const hasReachedDestination = Boolean(currentUid && destinationReachedBy[currentUid]);
+  const showMeetingMarker = Boolean(meetingPoint && !hasReachedMeeting);
+  const showMeetingNotification = Boolean(
+    hasActiveTrip
+      && meetingPoint
+      && !hasReachedMeeting
+      && !isCurrentUserMeetingSetter
+      && dismissedMeetingAlertKey !== meetingKey,
+  );
 
   useEffect(() => {
     hasActiveTripRef.current = hasActiveTrip;
   }, [hasActiveTrip]);
+
+  useEffect(() => {
+    if (!meetingPoint) {
+      setIsMeetingGuideActive(false);
+      setDismissedMeetingAlertKey(null);
+      autoNavigatedMeetingKeyRef.current = null;
+      return;
+    }
+
+    if (hasReachedMeeting) {
+      setIsMeetingGuideActive(false);
+      return;
+    }
+
+    if (isCurrentUserMeetingSetter && autoNavigatedMeetingKeyRef.current !== meetingKey) {
+      autoNavigatedMeetingKeyRef.current = meetingKey;
+      setIsMeetingGuideActive(true);
+
+      if (currentUserLocation) {
+        const navUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${currentUserLocation.latitude}%2C${currentUserLocation.longitude}%3B${meetingPoint.latitude}%2C${meetingPoint.longitude}`;
+        void Linking.openURL(navUrl);
+      }
+    }
+  }, [
+    currentUserLocation,
+    hasReachedMeeting,
+    isCurrentUserMeetingSetter,
+    meetingKey,
+    meetingPoint,
+  ]);
 
   const activeLocation = useMemo(() => {
     if (droppedPinLocation) {
@@ -146,6 +224,18 @@ export default function MapDashboardScreen({ navigation }: any) {
       }
 
       if (!map.getLayer(MAP_LAYER_ID)) {
+        map.addLayer({
+          id: MAP_MEETING_HALO_LAYER_ID,
+          type: 'circle',
+          source: MAP_SOURCE_ID,
+          filter: ['==', ['coalesce', ['get', 'isMeeting'], 0], 1],
+          paint: {
+            'circle-radius': 24,
+            'circle-color': '#F6C80A',
+            'circle-opacity': 0.24,
+          },
+        });
+
         map.addLayer({
           id: MAP_LAYER_ID,
           type: 'circle',
@@ -265,6 +355,108 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [activeLocation]);
 
   useEffect(() => {
+    if (!meetingPoint || !currentUserLocation || hasReachedMeeting || !isMeetingGuideActive) {
+      setMeetingRoutePoints([]);
+      return;
+    }
+
+    let isCancelled = false;
+
+    getDirectionsRoute(currentUserLocation, meetingPoint)
+      .then((points) => {
+        if (!isCancelled) {
+          setMeetingRoutePoints(points);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setMeetingRoutePoints([currentUserLocation, meetingPoint]);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUserLocation, meetingPoint]);
+
+  useEffect(() => {
+    if (!currentUid || !meetingPoint || !currentUserLocation || hasReachedMeeting) {
+      return;
+    }
+
+    const distanceMeters = getDistanceMeters(currentUserLocation, meetingPoint);
+
+    if (distanceMeters <= 40) {
+      void markMeetingReached();
+      setIsMeetingGuideActive(false);
+      setDismissedMeetingAlertKey(meetingKey);
+    }
+  }, [
+    currentUid,
+    currentUserLocation,
+    hasReachedMeeting,
+    markMeetingReached,
+    meetingKey,
+    meetingPoint,
+  ]);
+
+  useEffect(() => {
+    if (!currentUid || !destination || !currentUserLocation || hasReachedDestination) {
+      return;
+    }
+
+    const distanceMeters = getDistanceMeters(currentUserLocation, destination);
+
+    if (distanceMeters <= 50) {
+      void markDestinationReached();
+    }
+  }, [
+    currentUid,
+    currentUserLocation,
+    destination,
+    hasReachedDestination,
+    markDestinationReached,
+  ]);
+
+  useEffect(() => {
+    if (!currentUid || !ownerId || currentUid !== ownerId || isTripCompleted || members.length === 0) {
+      return;
+    }
+
+    const everyoneReachedDestination = members.every((member) => destinationReachedBy[member.id]);
+
+    if (everyoneReachedDestination) {
+      void completeTrip();
+    }
+  }, [
+    completeTrip,
+    currentUid,
+    destinationReachedBy,
+    isTripCompleted,
+    members,
+    ownerId,
+  ]);
+
+  useEffect(() => {
+    if (!isTripCompleted || completedAlertShownRef.current) {
+      return;
+    }
+
+    completedAlertShownRef.current = true;
+
+    Alert.alert('Trip Completed', 'ทุกคนถึงปลายทางแล้ว ระบบจะจบทริปให้อัตโนมัติ', [
+      {
+        text: 'OK',
+        onPress: () => {
+          void leaveTrip().finally(() => {
+            navigation.navigate('Home');
+          });
+        },
+      },
+    ]);
+  }, [isTripCompleted, leaveTrip, navigation]);
+
+  useEffect(() => {
     const map = mapRef.current;
 
     if (!map || !map.isStyleLoaded()) {
@@ -278,6 +470,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       coordinate: { latitude: number; longitude: number } | null,
       label: string,
       color: string,
+      isMeeting = false,
     ) => {
       if (!coordinate) {
         return;
@@ -293,6 +486,7 @@ export default function MapDashboardScreen({ navigation }: any) {
         properties: {
           label,
           color,
+          isMeeting: isMeeting ? 1 : 0,
         },
       });
     };
@@ -302,6 +496,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     pushPoint('search', searchedLocation, 'Search', '#34C759');
     pushPoint('dropped-pin', droppedPinLocation, 'Pin', '#FF9500');
     pushPoint('sos', isSOSActive ? sosActivatorLocation : null, 'SOS', '#D00000');
+    pushPoint('meeting-point', showMeetingMarker ? meetingPoint : null, 'Meeting Point', '#F6C80A', true);
 
     members.forEach((member) => {
       if (!member.location) {
@@ -327,15 +522,19 @@ export default function MapDashboardScreen({ navigation }: any) {
       features: pointsFeatures,
     };
 
+    const activeRoutePoints = showMeetingMarker && meetingPoint && currentUserLocation && isMeetingGuideActive
+      ? meetingRoutePoints
+      : routePoints;
+
     const routeCollection = {
       type: 'FeatureCollection',
-      features: routePoints.length > 1
+      features: activeRoutePoints.length > 1
         ? [
             {
               type: 'Feature',
               geometry: {
                 type: 'LineString',
-                coordinates: routePoints.map((point) => [point.longitude, point.latitude]),
+                coordinates: activeRoutePoints.map((point) => [point.longitude, point.latitude]),
               },
               properties: {},
             },
@@ -348,17 +547,44 @@ export default function MapDashboardScreen({ navigation }: any) {
 
     pointsSource?.setData(pointsCollection as GeoJSON.FeatureCollection);
     routeSource?.setData(routeCollection as GeoJSON.FeatureCollection);
+
+    if (map.getLayer(ROUTE_LAYER_ID)) {
+      map.setPaintProperty(
+        ROUTE_LAYER_ID,
+        'line-color',
+        showMeetingMarker && isMeetingGuideActive ? '#F6C80A' : '#FF7A18',
+      );
+    }
   }, [
     currentUserLocation,
+    meetingPoint,
     destination,
     droppedPinLocation,
     isSOSActive,
     members,
+    meetingRoutePoints,
+    isMeetingGuideActive,
     routePoints,
     searchedLocation,
+    showMeetingMarker,
     sosActivatorLocation,
     userProfile?.uid,
   ]);
+
+  const handleTapMeetingAlert = () => {
+    if (!meetingPoint) {
+      return;
+    }
+
+    setIsMeetingGuideActive(true);
+    setDismissedMeetingAlertKey(meetingKey);
+
+    mapRef.current?.easeTo({
+      center: [meetingPoint.longitude, meetingPoint.latitude],
+      zoom: 15,
+      duration: 600,
+    });
+  };
 
   const handleSearch = async () => {
     const query = searchText.trim();
@@ -470,25 +696,51 @@ export default function MapDashboardScreen({ navigation }: any) {
   };
 
   const canCreateTripFromMap = !hasActiveTrip && Boolean(droppedPinLocation || searchedLocation);
+  const isTripOwner = Boolean(currentUid && ownerId && currentUid === ownerId);
+
+  const handleMeetingPointButtonPress = async () => {
+    if (!hasActiveTrip) {
+      return;
+    }
+
+    if (!isTripOwner) {
+      Alert.alert('ไม่มีสิทธิ์', 'เฉพาะคนสร้างทริปเท่านั้นที่จัดการ Meeting Point ได้');
+      return;
+    }
+
+    if (meetingPoint) {
+      try {
+        await useTripStore.getState().clearMeetingPoint();
+        setIsMeetingGuideActive(false);
+        Alert.alert('ยกเลิกแล้ว', 'ลบจุดนัดหมายเรียบร้อย');
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'ไม่สามารถยกเลิกจุดนัดหมายได้';
+        Alert.alert('ผิดพลาด', message);
+      }
+      return;
+    }
+
+    navigation.navigate('MeetingPoint');
+  };
 
   return (
     <SafeAreaView style={[styles.container, !hasActiveTrip && styles.noTripContainer]}>
-      {hasActiveTrip && currentTripCode ? (
-        <View style={styles.tripCodeBanner}>
-          <Text style={styles.tripCodeLabel}>Join code: {currentTripCode}</Text>
-        </View>
-      ) : null}
-
       {hasActiveTrip ? (
         <View style={styles.header}>
           <View>
             <Text style={styles.tripName}>{tripName || 'Trip Map'}</Text>
-            <Text style={styles.memberCount}>👥 {members.length} Members</Text>
-            <Text style={styles.modeText}>Mode: {locationMode.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TouchableOpacity 
+              style={styles.codeButton}
+              onPress={() => setIsCodeModalVisible(!isCodeModalVisible)}
+            >
+              <Text style={styles.codeButtonText}>Code</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+              <Text style={styles.settingsIcon}>⚙️</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : null}
 
@@ -505,6 +757,16 @@ export default function MapDashboardScreen({ navigation }: any) {
         />
 
         <View style={styles.mapControls}>
+          {showMeetingNotification ? (
+            <TouchableOpacity style={styles.meetingAlertBanner} onPress={handleTapMeetingAlert}>
+              <Text style={styles.meetingAlertTitle}>⚠️ มีการปักหมุดจุดนัดหมายแล้ว</Text>
+              <Text style={styles.meetingAlertSubtitle}>
+                {meetingPointSetterName ? `${meetingPointSetterName} ปักหมุดไว้` : 'สมาชิกในทริปปักหมุดไว้'}
+                {meetingPointAddress ? ` • ${meetingPointAddress}` : ''}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
           {isSOSActive && hasActiveTrip ? (
             <View style={[styles.searchBox, { backgroundColor: '#FF3B30', borderColor: '#FF3B30', paddingVertical: 12, paddingHorizontal: 14 }]}>
               <View style={{ flex: 1 }}>
@@ -524,12 +786,13 @@ export default function MapDashboardScreen({ navigation }: any) {
                 <Text style={{ fontSize: 18 }}>✕</Text>
               </TouchableOpacity>
             </View>
-          ) : (
+          ) : isSearchBoxExpanded ? (
             <View style={styles.searchBox}>
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search destination..."
                 returnKeyType="search"
+                autoFocus
                 value={searchText}
                 onSubmitEditing={handleSearch}
                 onChangeText={setSearchText}
@@ -539,9 +802,22 @@ export default function MapDashboardScreen({ navigation }: any) {
                 onPress={handleSearch}
                 disabled={isSearching}
               >
-                <Text style={styles.searchButtonText}>{isSearching ? '...' : 'Search'}</Text>
+                <Text style={styles.searchButtonText}>{isSearching ? '...' : '🔍'}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={() => setIsSearchBoxExpanded(false)}
+                style={{ paddingLeft: 8 }}
+              >
+                <Text style={{ fontSize: 18, color: '#1A1A2E' }}>✕</Text>
               </TouchableOpacity>
             </View>
+          ) : (
+            <TouchableOpacity
+              style={styles.searchIconButton}
+              onPress={() => setIsSearchBoxExpanded(true)}
+            >
+              <Text style={{ fontSize: 18, color: '#FFFFFF' }}>🔍</Text>
+            </TouchableOpacity>
           )}
 
           {!isSOSActive && (isSuggestionLoading || suggestions.length > 0) && !isSearching ? (
@@ -613,8 +889,13 @@ export default function MapDashboardScreen({ navigation }: any) {
 
       {hasActiveTrip ? (
         <View style={styles.bottomNav}>
-          <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('MeetingPoint')}>
-            <Text style={styles.navBtnText}>📍 Set Point</Text>
+          <TouchableOpacity
+            style={[styles.navBtn, !isTripOwner && { opacity: 0.6 }]}
+            onPress={() => {
+              void handleMeetingPointButtonPress();
+            }}
+          >
+            <Text style={styles.navBtnText}>{meetingPoint ? 'Cancel' : '📍 Set Point'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.sosBtn, isSOSActive && styles.sosBtnActive]}
@@ -635,11 +916,18 @@ export default function MapDashboardScreen({ navigation }: any) {
           >
             <Text style={styles.sosBtnText}>{isSOSActive ? '✅ Cancel SOS' : '🚨 SOS'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navBtn} onPress={handleStartJourney}>
-            <Text style={styles.navBtnText}>{isInAppNavigation ? 'Stop' : 'Start'}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.navBtnText}>⚙️ Settings</Text>
+          <TouchableOpacity 
+            style={[styles.navBtn, { backgroundColor: '#D9534F' }]} 
+            onPress={async () => {
+              try {
+                await useTripStore.getState().leaveTrip();
+                navigation.navigate('Home');
+              } catch {
+                Alert.alert('Error', 'Failed to leave trip');
+              }
+            }}
+          >
+            <Text style={[styles.navBtnText, { color: 'white' }]}>Leave Trip</Text>
           </TouchableOpacity>
         </View>
       ) : (
@@ -657,27 +945,66 @@ export default function MapDashboardScreen({ navigation }: any) {
       )}
 
       {hasActiveTrip ? (
-        <FlatList
-          data={members}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 14, paddingBottom: 14, backgroundColor: 'white' }}
-          renderItem={({ item }) => (
-            <View style={styles.memberRow}>
-              <Text style={styles.memberAvatar}>👤</Text>
-              <View style={styles.memberMeta}>
-                <Text style={styles.memberName}>{item.id === userProfile?.uid ? `${item.name} (You)` : item.name}</Text>
-                <Text style={styles.memberMode}>{item.locationMode.toUpperCase()} • {item.location ? 'Online' : 'Waiting GPS'}</Text>
-              </View>
-              <Text style={item.batteryLevel < 20 ? styles.lowBattery : styles.battery}>🔋 {item.batteryLevel}%</Text>
+        <View style={styles.memberSheet}>
+          <TouchableOpacity
+            style={styles.memberSheetHeader}
+            onPress={() => {
+              setIsMemberPanelExpanded((prev) => !prev);
+            }}
+          >
+            <View>
+              <Text style={styles.memberSheetTitle}>Members ({members.length})</Text>
+              <Text style={styles.memberSheetHint}>Mode: {locationMode.toUpperCase()} • Destination: {destinationAddress || 'Not set yet'}</Text>
             </View>
-          )}
-          ListHeaderComponent={
-            <View style={{ paddingTop: 10, paddingBottom: 8 }}>
-              <Text style={styles.sectionTitle}>Members Status</Text>
-              <Text style={styles.memberMode}>Destination: {destinationAddress || 'Not set yet'}</Text>
+            <Text style={styles.memberSheetArrow}>{isMemberPanelExpanded ? '▾' : '▸'}</Text>
+          </TouchableOpacity>
+
+          {isMemberPanelExpanded ? (
+            <FlatList
+              style={styles.memberSheetList}
+              data={members}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.memberSheetListContent}
+              renderItem={({ item }) => (
+                <View style={styles.memberRow}>
+                  <Text style={styles.memberAvatar}>👤</Text>
+                  <View style={styles.memberMeta}>
+                    <Text style={styles.memberName}>{item.id === userProfile?.uid ? `${item.name} (You)` : item.name}</Text>
+                    <Text style={styles.memberMode}>{item.locationMode.toUpperCase()} • {item.location ? 'Online' : 'Waiting GPS'}</Text>
+                  </View>
+                  <Text style={item.batteryLevel < 20 ? styles.lowBattery : styles.battery}>🔋 {item.batteryLevel}%</Text>
+                </View>
+              )}
+            />
+          ) : null}
+        </View>
+      ) : null}
+
+      {/* Code Modal */}
+      {isCodeModalVisible && hasActiveTrip ? (
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Join Code</Text>
+              <TouchableOpacity
+                onPress={() => setIsCodeModalVisible(false)}
+                style={styles.modalCloseButton}
+              >
+                <Text style={styles.modalCloseText}>✕</Text>
+              </TouchableOpacity>
             </View>
-          }
-        />
+            <View style={styles.modalBody}>
+              <Text style={styles.codeDisplay}>{currentTripCode || 'N/A'}</Text>
+              <Text style={styles.codeText}>Share this code with others to join the trip</Text>
+            </View>
+            <TouchableOpacity
+              style={styles.modalCloseBtn}
+              onPress={() => setIsCodeModalVisible(false)}
+            >
+              <Text style={styles.modalCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       ) : null}
     </SafeAreaView>
   );

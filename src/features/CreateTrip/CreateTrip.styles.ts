@@ -2,6 +2,11 @@ import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F7FA', paddingHorizontal: 40, paddingVertical: 24 },
+  content: {
+    width: '100%',
+    maxWidth: 1080,
+    alignSelf: 'center',
+  },
   heading: { fontSize: 24, fontWeight: 'bold', marginBottom: 12, color: '#1A1A2E' },
   input: {
     backgroundColor: 'white',
@@ -65,6 +70,7 @@ export const styles = StyleSheet.create({
     borderColor: '#DDE1E6',
     marginTop: 12,
     position: 'relative',
+    backgroundColor: 'white',
   },
   map: {
     height: 280,
@@ -152,5 +158,10 @@ export const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#1A1A2E',
     letterSpacing: 1,
+  },
+  routePreviewText: {
+    marginTop: 8,
+    color: '#5A6573',
+    fontSize: 12,
   },
 });
