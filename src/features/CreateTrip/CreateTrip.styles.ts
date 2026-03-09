@@ -1,7 +1,7 @@
 import { StyleSheet } from 'react-native';
 
 export const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F5F7FA', padding: 16 },
+  container: { flex: 1, backgroundColor: '#F5F7FA', paddingHorizontal: 40, paddingVertical: 24 },
   heading: { fontSize: 24, fontWeight: 'bold', marginBottom: 12, color: '#1A1A2E' },
   input: {
     backgroundColor: 'white',

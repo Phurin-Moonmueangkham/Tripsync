@@ -21,7 +21,7 @@ export const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 16,
+    paddingHorizontal: 24,
     paddingTop: 40,
     paddingBottom: 16,
     backgroundColor: 'white',
@@ -44,8 +44,8 @@ export const styles = StyleSheet.create({
   mapControls: {
     position: 'absolute',
     top: 40,
-    left: 12,
-    right: 12,
+    left: 20,
+    right: 20,
   },
   searchBox: {
     backgroundColor: 'white',
@@ -98,11 +98,11 @@ export const styles = StyleSheet.create({
   },
   locateButtonDisabled: { opacity: 0.6 },
   locateButtonIcon: { color: '#1A1A2E', fontWeight: '700', fontSize: 20, lineHeight: 20 },
-  errorText: { color: '#D9534F', marginTop: 8, marginHorizontal: 14 },
+  errorText: { color: '#D9534F', marginTop: 8, marginHorizontal: 20 },
   memberPanel: {
     position: 'absolute',
-    left: 10,
-    right: 10,
+    left: 16,
+    right: 16,
     bottom: 8,
     height: MEMBER_PANEL_HEIGHT,
     backgroundColor: 'rgba(255,255,255,0.97)',
@@ -113,7 +113,7 @@ export const styles = StyleSheet.create({
   },
   memberPanelHeader: {
     height: MEMBER_PANEL_HANDLE_HEIGHT,
-    paddingHorizontal: 14,
+    paddingHorizontal: 20,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -122,7 +122,7 @@ export const styles = StyleSheet.create({
     position: 'relative',
   },
   memberPanelArrow: { fontSize: 16, color: '#1A1A2E', fontWeight: '700' },
-  memberPanelListContent: { paddingHorizontal: 14, paddingTop: 10, paddingBottom: 14 },
+  memberPanelListContent: { paddingHorizontal: 20, paddingTop: 10, paddingBottom: 14 },
   startJourneyButtonContainer: {
     position: 'absolute',
     left: 0,

@@ -303,7 +303,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       <View style={styles.searchRow}>
         <TextInput
           style={[styles.input, styles.searchInput]}
-          placeholder="Search destination from Google Maps"
+          placeholder="Search destination"
           value={searchText}
           onChangeText={(value) => {
             setSearchText(value);

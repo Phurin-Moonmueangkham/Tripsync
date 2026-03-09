@@ -21,78 +21,124 @@ type SuggestionOptions = {
   location?: Coordinate | null;
   radiusMeters?: number;
 };
-
-const getGoogleMapsApiKey = (): string => {
-  const key = process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY
-    || process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
-
-  if (!key) {
-    throw new Error('Missing EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY (or EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) in .env');
-  }
-
-  return key;
+type NominatimResult = {
+  lat: string;
+  lon: string;
+  display_name: string;
+  name?: string;
 };
 
-const decodePolyline = (encoded: string): Coordinate[] => {
-  const path: Coordinate[] = [];
-  let index = 0;
-  let latitude = 0;
-  let longitude = 0;
+type OsrmRouteResponse = {
+  code?: string;
+  routes?: Array<{
+    geometry?: {
+      coordinates?: number[][];
+    };
+  }>;
+};
 
-  while (index < encoded.length) {
-    let shift = 0;
-    let result = 0;
-    let byte = 0;
+const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org';
+const OSRM_BASE_URL = 'https://router.project-osrm.org';
+const MAX_ROUTE_POINTS = 320;
 
-    do {
-      byte = encoded.charCodeAt(index) - 63;
-      index += 1;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
+const parseCoordinate = (value: string): number => {
+  const parsed = Number.parseFloat(value);
 
-    const deltaLatitude = result & 1 ? ~(result >> 1) : result >> 1;
-    latitude += deltaLatitude;
-
-    shift = 0;
-    result = 0;
-
-    do {
-      byte = encoded.charCodeAt(index) - 63;
-      index += 1;
-      result |= (byte & 0x1f) << shift;
-      shift += 5;
-    } while (byte >= 0x20);
-
-    const deltaLongitude = result & 1 ? ~(result >> 1) : result >> 1;
-    longitude += deltaLongitude;
-
-    path.push({
-      latitude: latitude / 1e5,
-      longitude: longitude / 1e5,
-    });
+  if (!Number.isFinite(parsed)) {
+    throw new Error('Invalid coordinate value from geocoder.');
   }
 
-  return path;
+  return parsed;
+};
+
+const formatCoordinateLabel = (coordinate: Coordinate): string => `${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`;
+
+const downsampleRoute = (points: Coordinate[], maxPoints: number): Coordinate[] => {
+  if (points.length <= maxPoints) {
+    return points;
+  }
+
+  if (maxPoints < 2) {
+    return [points[0], points[points.length - 1]];
+  }
+
+  const result: Coordinate[] = [points[0]];
+  const interiorSlots = maxPoints - 2;
+  const usedIndices = new Set<number>([0, points.length - 1]);
+
+  for (let index = 1; index <= interiorSlots; index += 1) {
+    const pointIndex = Math.floor(index * (points.length - 1) / (maxPoints - 1));
+    
+    if (!usedIndices.has(pointIndex) && pointIndex > 0 && pointIndex < points.length - 1) {
+      result.push(points[pointIndex]);
+      usedIndices.add(pointIndex);
+    }
+  }
+
+  result.push(points[points.length - 1]);
+  return result;
+};
+
+const toPlaceSuggestion = (item: NominatimResult): PlaceSuggestion => {
+  const title = item.name?.trim() || item.display_name.split(',')[0]?.trim() || item.display_name;
+  const placeId = `osm:${item.lat},${item.lon}`;
+
+  return {
+    placeId,
+    mainText: title,
+    secondaryText: item.display_name,
+    fullText: item.display_name,
+  };
+};
+
+const buildNominatimSearchUrl = (query: string, options?: SuggestionOptions, limit = 6): string => {
+  const params = new URLSearchParams({
+    q: query,
+    format: 'jsonv2',
+    addressdetails: '1',
+    limit: String(limit),
+  });
+
+  if (options?.language?.trim()) {
+    params.set('accept-language', options.language.trim());
+  }
+
+  if (options?.location) {
+    const radius = options.radiusMeters ?? 30000;
+    const degrees = radius / 111000;
+    const left = options.location.longitude - degrees;
+    const right = options.location.longitude + degrees;
+    const top = options.location.latitude + degrees;
+    const bottom = options.location.latitude - degrees;
+    params.set('viewbox', `${left},${top},${right},${bottom}`);
+    params.set('bounded', '1');
+  }
+
+  return `${NOMINATIM_BASE_URL}/search?${params.toString()}`;
 };
 
 export const geocodeByText = async (query: string): Promise<GeocodeResult> => {
-  const apiKey = getGoogleMapsApiKey();
-  const endpoint = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(query)}&key=${apiKey}`;
-  const response = await fetch(endpoint);
-  const payload = await response.json();
+  const trimmedQuery = query.trim();
 
-  if (!response.ok || payload.status !== 'OK' || !payload.results?.length) {
+  if (!trimmedQuery) {
     throw new Error('Place not found.');
   }
 
-  const firstResult = payload.results[0];
+  const endpoint = buildNominatimSearchUrl(trimmedQuery, undefined, 1);
+  const response = await fetch(endpoint);
+  const payload = await response.json() as NominatimResult[];
+
+  if (!response.ok || !Array.isArray(payload) || payload.length === 0) {
+    throw new Error('Place not found.');
+  }
+
+  const firstResult = payload[0];
 
   return {
-    formattedAddress: firstResult.formatted_address,
+    formattedAddress: firstResult.display_name,
     location: {
-      latitude: firstResult.geometry.location.lat,
-      longitude: firstResult.geometry.location.lng,
+      latitude: parseCoordinate(firstResult.lat),
+      longitude: parseCoordinate(firstResult.lon),
     },
   };
 };
@@ -104,9 +150,6 @@ export const getPlaceSuggestions = async (query: string, options?: SuggestionOpt
     return [];
   }
 
-  const apiKey = getGoogleMapsApiKey();
-  const language = options?.language?.trim() || 'th';
-  const radius = options?.radiusMeters ?? 30000;
   const manualSuggestion: PlaceSuggestion = {
     placeId: `manual:${trimmedQuery}`,
     mainText: trimmedQuery,
@@ -114,32 +157,21 @@ export const getPlaceSuggestions = async (query: string, options?: SuggestionOpt
     fullText: trimmedQuery,
     isFallback: true,
   };
-  const locationBias = options?.location
-    ? `&location=${options.location.latitude},${options.location.longitude}&radius=${radius}`
-    : '';
-  const endpoint = `https://maps.googleapis.com/maps/api/place/autocomplete/json?input=${encodeURIComponent(trimmedQuery)}&language=${encodeURIComponent(language)}${locationBias}&key=${apiKey}`;
+
+  const endpoint = buildNominatimSearchUrl(trimmedQuery, options, 6);
   try {
     const response = await fetch(endpoint);
-    const payload = await response.json();
+    const payload = await response.json() as NominatimResult[];
 
-    if (!response.ok || !Array.isArray(payload.predictions)) {
-      throw new Error(payload?.error_message || 'Autocomplete request failed.');
+    if (!response.ok || !Array.isArray(payload)) {
+      throw new Error('Autocomplete request failed.');
     }
 
-    if (payload.status === 'ZERO_RESULTS') {
+    if (payload.length === 0) {
       return [manualSuggestion];
     }
 
-    if (payload.status !== 'OK') {
-      throw new Error(payload?.error_message || payload.status || 'Autocomplete request failed.');
-    }
-
-    const mapped = payload.predictions.slice(0, 6).map((prediction: any) => ({
-      placeId: String(prediction.place_id ?? ''),
-      mainText: String(prediction.structured_formatting?.main_text ?? prediction.description ?? ''),
-      secondaryText: String(prediction.structured_formatting?.secondary_text ?? ''),
-      fullText: String(prediction.description ?? ''),
-    }));
+    const mapped = payload.slice(0, 6).map(toPlaceSuggestion);
 
     return mapped.length > 0 ? mapped : [manualSuggestion];
   } catch {
@@ -168,58 +200,73 @@ export const getPlaceDetailsById = async (placeId: string): Promise<GeocodeResul
     throw new Error('Missing place id.');
   }
 
-  const apiKey = getGoogleMapsApiKey();
-  const endpoint = `https://maps.googleapis.com/maps/api/place/details/json?place_id=${encodeURIComponent(normalizedPlaceId)}&fields=formatted_address,geometry/location,name&key=${apiKey}`;
-  const response = await fetch(endpoint);
-  const payload = await response.json();
+  if (normalizedPlaceId.startsWith('osm:')) {
+    const coords = normalizedPlaceId.slice(4).split(',');
 
-  if (!response.ok || payload.status !== 'OK' || !payload.result?.geometry?.location) {
-    throw new Error('Unable to load place details.');
+    if (coords.length === 2) {
+      const latitude = Number.parseFloat(coords[0]);
+      const longitude = Number.parseFloat(coords[1]);
+
+      if (Number.isFinite(latitude) && Number.isFinite(longitude)) {
+        const coordinate = { latitude, longitude };
+        const formattedAddress = await reverseGeocode(coordinate);
+
+        return {
+          formattedAddress,
+          location: coordinate,
+        };
+      }
+    }
   }
 
-  const location = payload.result.geometry.location;
-
-  return {
-    formattedAddress: typeof payload.result.formatted_address === 'string'
-      ? payload.result.formatted_address
-      : typeof payload.result.name === 'string'
-        ? payload.result.name
-        : normalizedPlaceId,
-    location: {
-      latitude: location.lat,
-      longitude: location.lng,
-    },
-  };
+  return geocodeByText(normalizedPlaceId);
 };
 
 export const reverseGeocode = async (coordinate: Coordinate): Promise<string> => {
-  const apiKey = getGoogleMapsApiKey();
-  const endpoint = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${coordinate.latitude},${coordinate.longitude}&key=${apiKey}`;
+  const params = new URLSearchParams({
+    format: 'jsonv2',
+    lat: String(coordinate.latitude),
+    lon: String(coordinate.longitude),
+    zoom: '18',
+    addressdetails: '1',
+  });
+  const endpoint = `${NOMINATIM_BASE_URL}/reverse?${params.toString()}`;
   const response = await fetch(endpoint);
-  const payload = await response.json();
+  const payload = await response.json() as { display_name?: string };
 
-  if (!response.ok || payload.status !== 'OK' || !payload.results?.length) {
-    return `${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`;
+  if (!response.ok || typeof payload.display_name !== 'string' || !payload.display_name.trim()) {
+    return formatCoordinateLabel(coordinate);
   }
 
-  return payload.results[0].formatted_address;
+  return payload.display_name;
 };
 
 export const getDirectionsRoute = async (origin: Coordinate, destination: Coordinate): Promise<Coordinate[]> => {
-  const apiKey = getGoogleMapsApiKey();
-  const endpoint = `https://maps.googleapis.com/maps/api/directions/json?origin=${origin.latitude},${origin.longitude}&destination=${destination.latitude},${destination.longitude}&mode=driving&key=${apiKey}`;
+  const endpoint = `${OSRM_BASE_URL}/route/v1/driving/${origin.longitude},${origin.latitude};${destination.longitude},${destination.latitude}?overview=full&geometries=geojson`;
   const response = await fetch(endpoint);
-  const payload = await response.json();
+  const payload = await response.json() as OsrmRouteResponse;
 
-  if (!response.ok || payload.status !== 'OK' || !payload.routes?.length) {
-    throw new Error('Unable to build route from Google Maps.');
+  if (!response.ok || payload.code !== 'Ok' || !Array.isArray(payload.routes) || payload.routes.length === 0) {
+    throw new Error('Unable to build route from OpenStreetMap services.');
   }
 
-  const encoded = payload.routes[0]?.overview_polyline?.points;
+  const rawCoordinates = payload.routes[0]?.geometry?.coordinates;
 
-  if (typeof encoded !== 'string' || !encoded.length) {
+  if (!Array.isArray(rawCoordinates) || rawCoordinates.length === 0) {
     return [origin, destination];
   }
 
-  return decodePolyline(encoded);
+  const mapped = rawCoordinates
+    .filter((pair) => Array.isArray(pair) && pair.length >= 2)
+    .map((pair) => ({
+      latitude: Number(pair[1]),
+      longitude: Number(pair[0]),
+    }))
+    .filter((point) => Number.isFinite(point.latitude) && Number.isFinite(point.longitude));
+
+  if (mapped.length <= 1) {
+    return [origin, destination];
+  }
+
+  return downsampleRoute(mapped, MAX_ROUTE_POINTS);
 };

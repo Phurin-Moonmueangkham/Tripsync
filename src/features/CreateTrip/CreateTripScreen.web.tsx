@@ -172,7 +172,14 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
     }
 
     try {
-      const routePoints = await getDirectionsRoute(currentOrDefaultLocation, destination);
+      let routePoints: Coordinate[] = [currentOrDefaultLocation, destination];
+      try {
+        routePoints = await getDirectionsRoute(currentOrDefaultLocation, destination);
+      } catch (routeError) {
+        // Keep create-trip usable when public routing service is unavailable.
+        console.warn('Route preview unavailable:', routeError);
+      }
+
       setRoutePreview(routePoints);
 
       const tripCode = await createTrip({
@@ -228,7 +235,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       return;
     }
 
-    const url = `https://www.google.com/maps?q=${target.latitude},${target.longitude}`;
+    const url = `https://www.openstreetmap.org/?mlat=${target.latitude}&mlon=${target.longitude}#map=16/${target.latitude}/${target.longitude}`;
     await Linking.openURL(url);
   };
 
@@ -246,7 +253,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       <View style={styles.searchRow}>
         <TextInput
           style={[styles.input, styles.searchInput]}
-          placeholder="Search destination from Google Maps"
+          placeholder="Search destination"
           value={searchText}
           onChangeText={(value) => {
             setSearchText(value);
@@ -286,7 +293,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
         <View style={[styles.map, { justifyContent: 'center', alignItems: 'center', backgroundColor: '#EEF3FA', height: 220 }]}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: '#1A1A2E' }}>Web Destination Picker</Text>
           <Text style={{ marginTop: 8, color: '#4F5B6B', textAlign: 'center', paddingHorizontal: 20 }}>
-            เลือกปลายทางจากช่องค้นหา แล้วเปิดดูบน Google Maps
+            เลือกปลายทางจากช่องค้นหา แล้วเปิดดูบน OpenStreetMap
           </Text>
           {destination ? (
             <Text style={{ marginTop: 8, color: '#4F5B6B' }}>
@@ -295,7 +302,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
           ) : null}
 
           <TouchableOpacity style={[styles.searchBtn, { marginTop: 12 }]} onPress={() => { void handleOpenExternalMap(); }}>
-            <Text style={styles.searchBtnText}>Open in Google Maps</Text>
+            <Text style={styles.searchBtnText}>Open in OpenStreetMap</Text>
           </TouchableOpacity>
         </View>
 

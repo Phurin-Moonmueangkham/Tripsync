@@ -72,6 +72,20 @@ let locationSubscription: Location.LocationSubscription | null = null;
 let smartTrackingInterval: ReturnType<typeof setInterval> | null = null;
 
 const toErrorMessage = (error: unknown): string => {
+  const errorCode = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as any).code)
+    : '';
+
+  const firebaseErrorMap: Record<string, string> = {
+    'permission-denied': 'ไม่มีสิทธิ์เข้าถึงข้อมูลทริป (Firestore rules)',
+    'unauthenticated': 'กรุณาเข้าสู่ระบบใหม่อีกครั้ง',
+    'unavailable': 'Firebase ยังไม่พร้อมใช้งานในขณะนี้ กรุณาลองใหม่',
+  };
+
+  if (firebaseErrorMap[errorCode]) {
+    return firebaseErrorMap[errorCode];
+  }
+
   if (error instanceof Error) {
     return error.message;
   }

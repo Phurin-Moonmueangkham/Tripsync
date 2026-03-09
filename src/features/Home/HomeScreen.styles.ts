@@ -7,7 +7,7 @@ export const styles = StyleSheet.create({
   subtitle: { fontSize: 14, color: '#666', marginTop: 5 },
   illustrationContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   illustration: { fontSize: 80 },
-  buttonContainer: { paddingHorizontal: 30, paddingBottom: 20 },
+  buttonContainer: { paddingHorizontal: 48, paddingBottom: 20 },
   primaryButton: { backgroundColor: '#007AFF', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
   primaryButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
   secondaryButton: { backgroundColor: 'white', padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: '#007AFF' },

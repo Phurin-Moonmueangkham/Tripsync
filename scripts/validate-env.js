@@ -1,3 +1,33 @@
+const fs = require('fs');
+const path = require('path');
+
+const envPath = path.resolve(process.cwd(), '.env');
+
+if (fs.existsSync(envPath)) {
+  const envContent = fs.readFileSync(envPath, 'utf8');
+
+  envContent.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+
+    if (!trimmed || trimmed.startsWith('#')) {
+      return;
+    }
+
+    const separatorIndex = trimmed.indexOf('=');
+
+    if (separatorIndex <= 0) {
+      return;
+    }
+
+    const key = trimmed.slice(0, separatorIndex).trim();
+    const value = trimmed.slice(separatorIndex + 1).trim();
+
+    if (!process.env[key]) {
+      process.env[key] = value;
+    }
+  });
+}
+
 const requiredKeys = [
   'EXPO_PUBLIC_FIREBASE_API_KEY',
   'EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN',
@@ -8,8 +38,6 @@ const requiredKeys = [
 ];
 
 const optionalKeys = [
-  'EXPO_PUBLIC_GOOGLE_MAPS_API_KEY',
-  'EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY',
 ];
 
 const missingRequired = requiredKeys.filter((key) => !process.env[key]);
@@ -29,12 +57,7 @@ if (missingOptional.length > 0) {
   missingOptional.forEach((key) => {
     console.warn(`- ${key}`);
   });
-  console.warn('Maps search/routing features may fail without these values.\n');
-}
-
-if (!process.env.EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY && process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY) {
-  console.warn('ℹ️ EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY is not set.');
-  console.warn('   Mobile (Expo Go) place search may fail if EXPO_PUBLIC_GOOGLE_MAPS_API_KEY has HTTP referrer restrictions.\n');
+  console.warn('Some optional features may fail without these values.\n');
 }
 
 console.log('✅ Environment check passed.');

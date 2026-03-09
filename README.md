@@ -8,11 +8,7 @@ npm install
 
 ## 2) Environment variables
 
-Create `.env` in project root (you can copy from `.env.example`):
-
-```bash
-cp .env.example .env
-```
+Create `.env` in project root:
 
 Required keys:
 
@@ -23,8 +19,6 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=...
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 EXPO_PUBLIC_FIREBASE_APP_ID=...
-EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=...
-EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY=...
 ```
 
 ## 3) Run in development
@@ -68,16 +62,19 @@ npm run deploy:firebase
 
 Firebase project id in this repo: `tripsync-1d80c`.
 
-## Google Maps keys (important)
+## Map services (free stack)
 
-- `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
-	- Used for web map rendering (`iframe` / JS map).
-	- Usually configured with **HTTP referrer restrictions**.
-- `EXPO_PUBLIC_GOOGLE_MAPS_WEB_SERVICE_API_KEY`
-	- Used for Places Autocomplete, Place Details, Geocoding, and Directions requests from app code.
-	- For Expo Go/mobile testing, use a key without HTTP referrer restriction (or a dedicated key with API restrictions only).
+TripSync now uses free OpenStreetMap-based public services:
 
-If search suggestions are empty on Expo Go, this is commonly due to using a referrer-restricted key for web-service APIs.
+- Map preview/embed: OpenStreetMap
+- Web interactive map renderer: MapLibre GL JS
+- Search & reverse geocoding: Nominatim
+- Routing: OSRM demo server
+
+Important limits:
+
+- Public free endpoints are rate-limited and not guaranteed for high-traffic production.
+- For heavy usage, switch to self-hosted services or paid managed providers.
 
 ## Notes for web mode
 
@@ -104,7 +101,6 @@ In GitHub repo settings > Secrets and variables > Actions, add:
 - `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET`
 - `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID`
 - `EXPO_PUBLIC_FIREBASE_APP_ID`
-- `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
 
 ### Generate FIREBASE_TOKEN
 

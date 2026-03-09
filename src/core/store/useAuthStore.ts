@@ -56,10 +56,18 @@ const parseFirebaseError = (error: any): string => {
     'auth/missing-email': 'กรุณาป้อนอีเมล',
     'auth/missing-password': 'กรุณาป้อนรหัสผ่าน',
     'auth/invalid-credential': 'อีเมลหรือรหัสผ่านไม่ถูกต้อง',
+    'permission-denied': 'บัญชีเข้าสู่ระบบได้แล้ว แต่ไม่มีสิทธิ์อ่านข้อมูลโปรไฟล์ใน Firestore',
   };
   
   return errorMap[errorCode] || error?.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่อีกครั้ง';
 };
+
+const buildFallbackProfile = (uid: string, email: string, name = ''): UserProfile => ({
+  uid,
+  name,
+  email,
+  phoneNumber: '',
+});
 
 const toErrorMessage = (error: unknown): string => {
   if (error instanceof Error) {
@@ -72,25 +80,25 @@ const toErrorMessage = (error: unknown): string => {
 
 const readUserProfile = async (uid: string, fallbackEmail: string): Promise<UserProfile> => {
   const userDocRef = doc(db, 'users', uid);
-  const userSnapshot = await getDoc(userDocRef);
+  try {
+    const userSnapshot = await getDoc(userDocRef);
 
-  if (!userSnapshot.exists()) {
+    if (!userSnapshot.exists()) {
+      return buildFallbackProfile(uid, fallbackEmail);
+    }
+
+    const data = userSnapshot.data();
+
     return {
       uid,
-      name: '',
-      email: fallbackEmail,
-      phoneNumber: '',
+      name: typeof data.name === 'string' ? data.name : '',
+      email: typeof data.email === 'string' ? data.email : fallbackEmail,
+      phoneNumber: typeof data.phoneNumber === 'string' ? data.phoneNumber : '',
     };
+  } catch {
+    // If Firestore user profile is blocked/unavailable, keep auth session usable.
+    return buildFallbackProfile(uid, fallbackEmail);
   }
-
-  const data = userSnapshot.data();
-
-  return {
-    uid,
-    name: typeof data.name === 'string' ? data.name : '',
-    email: typeof data.email === 'string' ? data.email : fallbackEmail,
-    phoneNumber: typeof data.phoneNumber === 'string' ? data.phoneNumber : '',
-  };
 };
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -114,9 +122,13 @@ export const useAuthStore = create<AuthState>((set) => ({
 
         try {
           const userProfile = await readUserProfile(firebaseUser.uid, firebaseUser.email ?? '');
+          const mergedProfile: UserProfile = {
+            ...userProfile,
+            name: userProfile.name || firebaseUser.displayName || '',
+          };
 
           set({
-            userProfile,
+            userProfile: mergedProfile,
             isAuthReady: true,
             isAuthLoading: false,
             authError: null,
@@ -145,9 +157,13 @@ export const useAuthStore = create<AuthState>((set) => ({
     try {
       const credential = await signInWithEmailAndPassword(auth, email.trim(), password);
       const userProfile = await readUserProfile(credential.user.uid, credential.user.email ?? email.trim());
+      const mergedProfile: UserProfile = {
+        ...userProfile,
+        name: userProfile.name || credential.user.displayName || '',
+      };
 
       set({
-        userProfile,
+        userProfile: mergedProfile,
         isAuthLoading: false,
         authError: null,
       });
