@@ -68,6 +68,7 @@ export default function MapDashboardScreen({ navigation }: any) {
   const hasActiveTripRef = useRef(false);
   const autoNavigatedMeetingKeyRef = useRef<string | null>(null);
   const completedAlertShownRef = useRef(false);
+  const manualFocusUntilRef = useRef(0);
 
   const userProfile = useAuthStore((state) => state.userProfile);
   const {
@@ -152,6 +153,10 @@ export default function MapDashboardScreen({ navigation }: any) {
   ]);
 
   const activeLocation = useMemo(() => {
+    if (hasActiveTrip && currentUserLocation) {
+      return currentUserLocation;
+    }
+
     if (droppedPinLocation) {
       return droppedPinLocation;
     }
@@ -165,7 +170,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     return currentUserLocation;
-  }, [currentUserLocation, destination, searchedLocation, droppedPinLocation]);
+  }, [currentUserLocation, destination, searchedLocation, droppedPinLocation, hasActiveTrip]);
 
   useEffect(() => {
     void startLocationTracking();
@@ -330,6 +335,10 @@ export default function MapDashboardScreen({ navigation }: any) {
 
   // Trigger vibration when someone else activates SOS (not the person who pressed it)
   useEffect(() => {
+    if (!isSOSActive && window.navigator?.vibrate) {
+      window.navigator.vibrate(0);
+    }
+
     if (isSOSActive && sosActivatorName && sosActivatorId && sosActivatorId !== userProfile?.uid) {
       if (window.navigator?.vibrate) {
         // Vibrate strongly for 15-20 seconds (like incoming call): vibrate 1000ms, pause 500ms
@@ -340,10 +349,20 @@ export default function MapDashboardScreen({ navigation }: any) {
         window.navigator.vibrate(pattern);
       }
     }
+
+    return () => {
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate(0);
+      }
+    };
   }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
 
   useEffect(() => {
     if (!mapRef.current || !activeLocation) {
+      return;
+    }
+
+    if (hasActiveTrip && Date.now() < manualFocusUntilRef.current) {
       return;
     }
 
@@ -352,10 +371,10 @@ export default function MapDashboardScreen({ navigation }: any) {
       zoom: 15,
       duration: 700,
     });
-  }, [activeLocation]);
+  }, [activeLocation, hasActiveTrip]);
 
   useEffect(() => {
-    if (!meetingPoint || !currentUserLocation || hasReachedMeeting || !isMeetingGuideActive) {
+    if (!meetingPoint || !currentUserLocation || hasReachedMeeting) {
       setMeetingRoutePoints([]);
       return;
     }
@@ -377,7 +396,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     return () => {
       isCancelled = true;
     };
-  }, [currentUserLocation, meetingPoint]);
+  }, [currentUserLocation, hasReachedMeeting, meetingPoint]);
 
   useEffect(() => {
     if (!currentUid || !meetingPoint || !currentUserLocation || hasReachedMeeting) {
@@ -491,7 +510,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       });
     };
 
-    pushPoint('destination', destination, 'Destination', '#FF3B30');
+    pushPoint('destination', destination, 'Destination', '#007AFF');
     pushPoint('current-user', currentUserLocation, 'You', '#007AFF');
     pushPoint('search', searchedLocation, 'Search', '#34C759');
     pushPoint('dropped-pin', droppedPinLocation, 'Pin', '#FF9500');
@@ -512,7 +531,7 @@ export default function MapDashboardScreen({ navigation }: any) {
         },
         properties: {
           label: member.id === userProfile?.uid ? 'You' : member.name,
-          color: member.id === userProfile?.uid ? '#007AFF' : '#8A63D2',
+          color: member.id === userProfile?.uid ? '#007AFF' : '#34C759',
         },
       });
     });
@@ -522,7 +541,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       features: pointsFeatures,
     };
 
-    const activeRoutePoints = showMeetingMarker && meetingPoint && currentUserLocation && isMeetingGuideActive
+    const activeRoutePoints = showMeetingMarker && meetingPoint && currentUserLocation
       ? meetingRoutePoints
       : routePoints;
 
@@ -552,7 +571,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       map.setPaintProperty(
         ROUTE_LAYER_ID,
         'line-color',
-        showMeetingMarker && isMeetingGuideActive ? '#F6C80A' : '#FF7A18',
+        showMeetingMarker ? '#F6C80A' : '#007AFF',
       );
     }
   }, [
@@ -563,7 +582,6 @@ export default function MapDashboardScreen({ navigation }: any) {
     isSOSActive,
     members,
     meetingRoutePoints,
-    isMeetingGuideActive,
     routePoints,
     searchedLocation,
     showMeetingMarker,
@@ -639,6 +657,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       }
 
       const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      manualFocusUntilRef.current = 0;
       setSearchedLocation({
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
@@ -690,9 +709,28 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     setIsInAppNavigation(true);
-    const url = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${currentUserLocation.latitude}%2C${currentUserLocation.longitude}%3B${destination.latitude}%2C${destination.longitude}`;
-    Linking.openURL(url);
-    Alert.alert('เปิดนำทาง', 'เปิด OpenStreetMap เพื่อนำทางไปยังปลายทาง');
+    manualFocusUntilRef.current = 0;
+    mapRef.current?.easeTo({
+      center: [currentUserLocation.longitude, currentUserLocation.latitude],
+      zoom: 16,
+      duration: 500,
+    });
+    Alert.alert('เริ่มโหมดนำทาง', 'แผนที่จะติดตามตำแหน่งของคุณในหน้าปัจจุบัน');
+  };
+
+  const handleFocusMember = (member: (typeof members)[number]) => {
+    if (!member.location || !mapRef.current) {
+      return;
+    }
+
+    // Pause self-follow briefly so the selected member stays in focus.
+    manualFocusUntilRef.current = Date.now() + 10000;
+
+    mapRef.current.easeTo({
+      center: [member.location.longitude, member.location.latitude],
+      zoom: 16,
+      duration: 500,
+    });
   };
 
   const canCreateTripFromMap = !hasActiveTrip && Boolean(droppedPinLocation || searchedLocation);
@@ -902,15 +940,9 @@ export default function MapDashboardScreen({ navigation }: any) {
             onPress={async () => {
               const newSOSState = !isSOSActive;
               await triggerSOS(newSOSState);
-              
-              // Trigger vibration for all members (web uses different vibration API)
-              // Vibrate strongly for 15-20 seconds (like incoming call)
-              if (newSOSState && window.navigator?.vibrate) {
-                const pattern = [];
-                for (let i = 0; i < 12; i++) { // 12 cycles = 18 seconds
-                  pattern.push(1000, 500);
-                }
-                window.navigator.vibrate(pattern);
+
+              if (!newSOSState && window.navigator?.vibrate) {
+                window.navigator.vibrate(0);
               }
             }}
           >
@@ -966,14 +998,20 @@ export default function MapDashboardScreen({ navigation }: any) {
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.memberSheetListContent}
               renderItem={({ item }) => (
-                <View style={styles.memberRow}>
+                <TouchableOpacity
+                  style={styles.memberRow}
+                  onPress={() => {
+                    handleFocusMember(item);
+                  }}
+                  activeOpacity={0.8}
+                >
                   <Text style={styles.memberAvatar}>👤</Text>
                   <View style={styles.memberMeta}>
                     <Text style={styles.memberName}>{item.id === userProfile?.uid ? `${item.name} (You)` : item.name}</Text>
                     <Text style={styles.memberMode}>{item.locationMode.toUpperCase()} • {item.location ? 'Online' : 'Waiting GPS'}</Text>
                   </View>
                   <Text style={item.batteryLevel < 20 ? styles.lowBattery : styles.battery}>🔋 {item.batteryLevel}%</Text>
-                </View>
+                </TouchableOpacity>
               )}
             />
           ) : null}

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, SafeAreaView, Switch, TouchableOpacity, Alert } from 'react-native';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { useTripStore } from '../../core/store/useTripStore';
+import BottomNavigationBar from '../../components/BottomNavigationBar';
 import { styles } from './SettingsScreen.styles';
 
 const SettingsScreen: React.FC<any> = ({ navigation }) => {
@@ -77,6 +78,8 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
       >
         <Text style={styles.logoutBtnText}>{isAuthLoading ? 'Logging out...' : 'Log out'}</Text>
       </TouchableOpacity>
+
+      <BottomNavigationBar navigation={navigation} activeRoute="Settings" />
     </SafeAreaView>
   );
 };

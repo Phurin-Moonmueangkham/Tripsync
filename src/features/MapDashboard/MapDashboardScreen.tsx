@@ -5,8 +5,9 @@ import { ActivityIndicator, Alert, Animated, FlatList, SafeAreaView, Text, Touch
 import { TextInput } from 'react-native';
 import MapView, { MapPressEvent, Marker, Polyline, Circle } from 'react-native-maps';
 import { useAuthStore } from '../../core/store/useAuthStore';
-import { geocodeByText, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
+import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useTripStore } from '../../core/store/useTripStore';
+import BottomNavigationBar from '../../components/BottomNavigationBar';
 import { MEMBER_PANEL_HANDLE_HEIGHT, MEMBER_PANEL_HEIGHT, toHeading } from './MapDashboard.helpers';
 import { styles } from './MapDashboard.styles';
 
@@ -24,8 +25,11 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [droppedPinAddress, setDroppedPinAddress] = useState('');
   const [isMemberPanelExpanded, setIsMemberPanelExpanded] = useState(false);
   const [isInAppNavigation, setIsInAppNavigation] = useState(false);
+  const [meetingRoutePoints, setMeetingRoutePoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const memberPanelTranslateY = useRef(new Animated.Value(MEMBER_PANEL_HEIGHT - MEMBER_PANEL_HANDLE_HEIGHT)).current;
   const lastNavigationLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  const sosVibrationTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const manualFocusUntilRef = useRef(0);
 
   const userProfile = useAuthStore((state) => state.userProfile);
   const {
@@ -35,6 +39,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     members,
     destination,
     destinationAddress,
+    meetingPoint,
     routePoints,
     isSOSActive,
     sosActivatorId,
@@ -49,11 +54,20 @@ export default function MapDashboardScreen({ navigation }: any) {
   } = useTripStore();
 
   const hasActiveTrip = Boolean(currentTripCode);
+  const currentUid = userProfile?.uid ?? null;
+
+  const clearSosVibrationQueue = () => {
+    sosVibrationTimeoutsRef.current.forEach((timeoutId) => {
+      clearTimeout(timeoutId);
+    });
+    sosVibrationTimeoutsRef.current = [];
+  };
 
   useEffect(() => {
     if (!hasActiveTrip) {
       setIsMemberPanelExpanded(false);
       setIsInAppNavigation(false);
+      setMeetingRoutePoints([]);
       memberPanelTranslateY.setValue(MEMBER_PANEL_HEIGHT - MEMBER_PANEL_HANDLE_HEIGHT);
       lastNavigationLocationRef.current = null;
     }
@@ -61,19 +75,54 @@ export default function MapDashboardScreen({ navigation }: any) {
 
   // Trigger vibration when someone else activates SOS (not the person who pressed it)
   useEffect(() => {
+    clearSosVibrationQueue();
+
     if (isSOSActive && sosActivatorName && sosActivatorId && sosActivatorId !== userProfile?.uid) {
       try {
-        // Vibrate strongly for 15-20 seconds (like incoming call)
-        for (let i = 0; i < 20; i++) { // 20 heavy impacts over ~16 seconds
-          setTimeout(() => {
+        // Queue vibration pulses and keep timeout IDs so we can cancel instantly on SOS off.
+        for (let i = 0; i < 10; i += 1) {
+          const timeoutId = setTimeout(() => {
             void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           }, i * 800);
+          sosVibrationTimeoutsRef.current.push(timeoutId);
         }
       } catch {
         // Vibration not available
       }
     }
+
+    return () => {
+      clearSosVibrationQueue();
+    };
   }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
+
+  useEffect(() => {
+    if (!hasActiveTrip || !meetingPoint || !currentUserLocation) {
+      setMeetingRoutePoints([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    getDirectionsRoute(currentUserLocation, meetingPoint)
+      .then((points) => {
+        if (cancelled) {
+          return;
+        }
+        setMeetingRoutePoints(points.length > 1 ? points : [currentUserLocation, meetingPoint]);
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+        // Keep guidance usable even when routing service is unavailable.
+        setMeetingRoutePoints([currentUserLocation, meetingPoint]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUserLocation, hasActiveTrip, meetingPoint]);
 
   useEffect(() => {
     void startLocationTracking();
@@ -138,7 +187,11 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [destination, hasActiveTrip, isInAppNavigation, members, routePoints]);
 
   useEffect(() => {
-    if (!hasActiveTrip || !isInAppNavigation || !currentUserLocation) {
+    if (!hasActiveTrip || !currentUserLocation) {
+      return;
+    }
+
+    if (Date.now() < manualFocusUntilRef.current) {
       return;
     }
 
@@ -149,15 +202,26 @@ export default function MapDashboardScreen({ navigation }: any) {
         ? toHeading(currentUserLocation, destination)
         : 0;
 
-    mapRef.current?.animateCamera(
-      {
-        center: currentUserLocation,
-        heading,
-        pitch: 52,
-        zoom: 17,
-      },
-      { duration: 700 },
-    );
+    if (isInAppNavigation) {
+      mapRef.current?.animateCamera(
+        {
+          center: currentUserLocation,
+          heading,
+          pitch: 52,
+          zoom: 17,
+        },
+        { duration: 700 },
+      );
+    } else {
+      mapRef.current?.animateToRegion(
+        {
+          ...currentUserLocation,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        700,
+      );
+    }
 
     lastNavigationLocationRef.current = currentUserLocation;
   }, [currentUserLocation, destination, hasActiveTrip, isInAppNavigation]);
@@ -269,6 +333,7 @@ export default function MapDashboardScreen({ navigation }: any) {
         longitude: position.coords.longitude,
       };
 
+      manualFocusUntilRef.current = 0;
       lastManualCameraChangeAt.current = Date.now();
 
       mapRef.current?.animateToRegion(
@@ -282,6 +347,24 @@ export default function MapDashboardScreen({ navigation }: any) {
     } finally {
       setIsLocating(false);
     }
+  };
+
+  const handleFocusMember = (member: (typeof members)[number]) => {
+    if (!member.location) {
+      return;
+    }
+
+    // Pause auto-follow briefly so users can inspect another member.
+    manualFocusUntilRef.current = Date.now() + 10000;
+    lastManualCameraChangeAt.current = Date.now();
+    mapRef.current?.animateToRegion(
+      {
+        ...member.location,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      600,
+    );
   };
 
   const promptCreateTripFromLocation = (location: { latitude: number; longitude: number }, address?: string) => {
@@ -382,9 +465,13 @@ export default function MapDashboardScreen({ navigation }: any) {
             void handleMapPress(event);
           }}
         >
-          {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#FF3B30" /> : null}
+          {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#007AFF" /> : null}
 
           {routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
+
+          {meetingRoutePoints.length > 1 ? <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={4} /> : null}
+
+          {meetingPoint ? <Marker coordinate={meetingPoint} title="Meeting Point" pinColor="#F6C80A" /> : null}
 
           {searchedLocation ? (
             <Marker
@@ -416,27 +503,19 @@ export default function MapDashboardScreen({ navigation }: any) {
           ) : null}
 
           {members
-            .filter((member) => member.location)
+            .filter((member) => member.location && member.id !== currentUid)
             .map((member) => {
-              const isCurrentUser = member.id === userProfile?.uid;
-              const isHost = member.id === ownerId;
               const isSOSActivator = isSOSActive && member.id === sosActivatorId;
 
-              // ลำดับสี: SOS > Host > Member
-              let pinColor = '#007AFF'; // สีฟ้า (member ทั่วไป)
+              let pinColor = '#34C759';
               let titleSuffix = '';
 
               if (isSOSActivator) {
-                pinColor = '#FF3B30'; // สีแดง (SOS)
-              } else if (isHost) {
-                pinColor = '#FFD60A'; // สีเหลือง (Host)
-                titleSuffix = ' (Host)';
+                pinColor = '#FF3B30';
               }
 
-              if (isCurrentUser && !titleSuffix) {
-                titleSuffix = ' (You)';
-              } else if (isCurrentUser && titleSuffix === ' (Host)') {
-                titleSuffix = ' (You - Host)';
+              if (member.id === ownerId) {
+                titleSuffix = ' (Host)';
               }
 
               return (
@@ -483,6 +562,7 @@ export default function MapDashboardScreen({ navigation }: any) {
               </View>
               <TouchableOpacity
                 onPress={() => {
+                  clearSosVibrationQueue();
                   void triggerSOS(false);
                 }}
                 style={{ paddingLeft: 8 }}
@@ -582,14 +662,20 @@ export default function MapDashboardScreen({ navigation }: any) {
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.memberPanelListContent}
               renderItem={({ item }) => (
-                <View style={styles.memberRow}>
+                <TouchableOpacity
+                  style={styles.memberRow}
+                  onPress={() => {
+                    handleFocusMember(item);
+                  }}
+                  activeOpacity={0.8}
+                >
                   <Text style={styles.memberAvatar}>👤</Text>
                   <View style={styles.memberMeta}>
                     <Text style={styles.memberName}>{item.id === userProfile?.uid ? `${item.name} (You)` : item.name}</Text>
                     <Text style={styles.memberMode}>{item.locationMode.toUpperCase()} • {item.location ? 'Online' : 'Waiting GPS'}</Text>
                   </View>
                   <Text style={item.batteryLevel < 20 ? styles.lowBattery : styles.battery}>🔋 {item.batteryLevel}%</Text>
-                </View>
+                </TouchableOpacity>
               )}
             />
 
@@ -608,6 +694,11 @@ export default function MapDashboardScreen({ navigation }: any) {
             style={[styles.sosBtn, isSOSActive && styles.sosBtnActive]}
             onPress={async () => {
               const newSOSState = !isSOSActive;
+
+              if (!newSOSState) {
+                clearSosVibrationQueue();
+              }
+
               await triggerSOS(newSOSState);
               
               // No vibration for the person who presses SOS
@@ -621,17 +712,7 @@ export default function MapDashboardScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       ) : (
-        <View style={styles.homeBottomNav}>
-          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
-            <Text style={styles.navLabel}>Home</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem}>
-            <Text style={styles.navLabel}>Map</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.navLabel}>Settings</Text>
-          </TouchableOpacity>
-        </View>
+        <BottomNavigationBar navigation={navigation} activeRoute="MapDashboard" />
       )}
     </SafeAreaView>
   );
