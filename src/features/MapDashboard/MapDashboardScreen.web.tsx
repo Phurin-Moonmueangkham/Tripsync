@@ -5,8 +5,6 @@ import { ActivityIndicator, Alert, FlatList, Linking, SafeAreaView, Text, TextIn
 import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { useTripStore } from '../../core/store/useTripStore';
-import { useSettingsStore } from '../../core/store/useSettingsStore';
-import BottomNavigationBar from '../../components/BottomNavigationBar';
 import { styles } from './MapDashboard.styles';
 
 const MAP_SOURCE_ID = 'trip-points-source';
@@ -67,15 +65,11 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [dismissedMeetingAlertKey, setDismissedMeetingAlertKey] = useState<string | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const personMarkersRef = useRef<Record<string, maplibregl.Marker>>({});
   const hasActiveTripRef = useRef(false);
   const autoNavigatedMeetingKeyRef = useRef<string | null>(null);
   const completedAlertShownRef = useRef(false);
-  const lastSosZoomKeyRef = useRef<string | null>(null);
 
   const userProfile = useAuthStore((state) => state.userProfile);
-  const sosAlertsEnabled = useSettingsStore((state) => state.sosAlerts);
-  const proximityAlertsEnabled = useSettingsStore((state) => state.proximityAlerts);
   const {
     currentTripCode,
     tripName,
@@ -122,17 +116,6 @@ export default function MapDashboardScreen({ navigation }: any) {
       && !isCurrentUserMeetingSetter
       && dismissedMeetingAlertKey !== meetingKey,
   );
-  const defaultTripRoutePoints = useMemo(() => {
-    if (routePoints.length > 1) {
-      return routePoints;
-    }
-
-    if (currentUserLocation && destination) {
-      return [currentUserLocation, destination];
-    }
-
-    return routePoints;
-  }, [currentUserLocation, destination, routePoints]);
 
   useEffect(() => {
     hasActiveTripRef.current = hasActiveTrip;
@@ -154,6 +137,11 @@ export default function MapDashboardScreen({ navigation }: any) {
     if (isCurrentUserMeetingSetter && autoNavigatedMeetingKeyRef.current !== meetingKey) {
       autoNavigatedMeetingKeyRef.current = meetingKey;
       setIsMeetingGuideActive(true);
+
+      if (currentUserLocation) {
+        const navUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${currentUserLocation.latitude}%2C${currentUserLocation.longitude}%3B${meetingPoint.latitude}%2C${meetingPoint.longitude}`;
+        void Linking.openURL(navUrl);
+      }
     }
   }, [
     currentUserLocation,
@@ -164,10 +152,6 @@ export default function MapDashboardScreen({ navigation }: any) {
   ]);
 
   const activeLocation = useMemo(() => {
-    if (hasActiveTrip && currentUserLocation) {
-      return currentUserLocation;
-    }
-
     if (droppedPinLocation) {
       return droppedPinLocation;
     }
@@ -181,39 +165,15 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     return currentUserLocation;
-  }, [currentUserLocation, destination, searchedLocation, droppedPinLocation, hasActiveTrip]);
+  }, [currentUserLocation, destination, searchedLocation, droppedPinLocation]);
 
   useEffect(() => {
-    if (!isSOSActive || !sosActivatorLocation || !sosActivatorId) {
-      lastSosZoomKeyRef.current = null;
-      return;
-    }
-
-    const sosKey = `${sosActivatorId}-${Math.round(sosActivatorLocation.latitude * 10000)}-${Math.round(sosActivatorLocation.longitude * 10000)}`;
-    if (lastSosZoomKeyRef.current === sosKey) {
-      return;
-    }
-
-    lastSosZoomKeyRef.current = sosKey;
-    mapRef.current?.easeTo({
-      center: [sosActivatorLocation.longitude, sosActivatorLocation.latitude],
-      zoom: 16,
-      duration: 650,
-    });
-  }, [isSOSActive, sosActivatorId, sosActivatorLocation]);
-
-  useEffect(() => {
-    if (!hasActiveTrip) {
-      void stopLocationTracking();
-      return;
-    }
-
     void startLocationTracking();
 
     return () => {
       void stopLocationTracking();
     };
-  }, [currentTripCode, hasActiveTrip, locationMode, startLocationTracking, stopLocationTracking]);
+  }, [startLocationTracking, stopLocationTracking, locationMode]);
 
   useEffect(() => {
     if (!mapContainerRef.current || mapRef.current) {
@@ -246,7 +206,7 @@ export default function MapDashboardScreen({ navigation }: any) {
           type: 'line',
           source: ROUTE_SOURCE_ID,
           paint: {
-            'line-color': '#007AFF',
+            'line-color': '#FF7A18',
             'line-width': 4,
             'line-opacity': 0.9,
           },
@@ -280,7 +240,6 @@ export default function MapDashboardScreen({ navigation }: any) {
           id: MAP_LAYER_ID,
           type: 'circle',
           source: MAP_SOURCE_ID,
-          filter: ['!=', ['coalesce', ['get', 'isPerson'], 0], 1],
           paint: {
             'circle-radius': 7,
             'circle-color': ['coalesce', ['get', 'color'], '#007AFF'],
@@ -288,7 +247,6 @@ export default function MapDashboardScreen({ navigation }: any) {
             'circle-stroke-color': '#FFFFFF',
           },
         });
-
       }
 
       if (!map.getLayer(MAP_LABEL_LAYER_ID)) {
@@ -296,7 +254,6 @@ export default function MapDashboardScreen({ navigation }: any) {
           id: MAP_LABEL_LAYER_ID,
           type: 'symbol',
           source: MAP_SOURCE_ID,
-          filter: ['!=', ['coalesce', ['get', 'isPerson'], 0], 1],
           layout: {
             'text-field': ['coalesce', ['get', 'label'], ''],
             'text-size': 11,
@@ -341,103 +298,6 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, []);
 
   useEffect(() => {
-    const map = mapRef.current;
-
-    if (!map || !map.isStyleLoaded() || !hasActiveTrip) {
-      Object.values(personMarkersRef.current).forEach((marker) => marker.remove());
-      personMarkersRef.current = {};
-      return;
-    }
-
-    const points: Array<{ id: string; latitude: number; longitude: number; color: string; title: string }> = [];
-
-    if (currentUserLocation) {
-      const isCurrentUserSos = isSOSActive && sosActivatorId === currentUid;
-      points.push({
-        id: 'current-user',
-        latitude: currentUserLocation.latitude,
-        longitude: currentUserLocation.longitude,
-        color: isCurrentUserSos ? '#FF3B30' : '#22C55E',
-        title: 'You',
-      });
-    }
-
-    members.forEach((member) => {
-      if (!member.location || member.id === userProfile?.uid) {
-        return;
-      }
-
-      points.push({
-        id: `member-${member.id}`,
-        latitude: member.location.latitude,
-        longitude: member.location.longitude,
-        color: isSOSActive && member.id === sosActivatorId ? '#FF3B30' : '#22C55E',
-        title: member.name,
-      });
-    });
-
-    const nextIds = new Set(points.map((point) => point.id));
-
-    Object.entries(personMarkersRef.current).forEach(([id, marker]) => {
-      if (!nextIds.has(id)) {
-        marker.remove();
-        delete personMarkersRef.current[id];
-      }
-    });
-
-    points.forEach((point) => {
-      const existingMarker = personMarkersRef.current[point.id];
-      if (existingMarker) {
-        existingMarker.setLngLat([point.longitude, point.latitude]);
-        return;
-      }
-
-      const markerElement = document.createElement('div');
-      markerElement.title = point.title;
-      markerElement.style.width = '34px';
-      markerElement.style.height = '46px';
-      markerElement.style.display = 'flex';
-      markerElement.style.flexDirection = 'column';
-      markerElement.style.alignItems = 'center';
-      markerElement.style.justifyContent = 'flex-start';
-
-      const pinHead = document.createElement('div');
-      pinHead.style.width = '24px';
-      pinHead.style.height = '24px';
-      pinHead.style.borderRadius = '12px';
-      pinHead.style.backgroundColor = point.color;
-      pinHead.style.border = '2px solid #FFFFFF';
-      pinHead.style.display = 'flex';
-      pinHead.style.alignItems = 'center';
-      pinHead.style.justifyContent = 'center';
-
-      const innerDot = document.createElement('div');
-      innerDot.style.width = '8px';
-      innerDot.style.height = '8px';
-      innerDot.style.borderRadius = '4px';
-      innerDot.style.backgroundColor = '#FFFFFF';
-      pinHead.appendChild(innerDot);
-
-      const pinTail = document.createElement('div');
-      pinTail.style.width = '0';
-      pinTail.style.height = '0';
-      pinTail.style.borderLeft = '6px solid transparent';
-      pinTail.style.borderRight = '6px solid transparent';
-      pinTail.style.borderTop = `10px solid ${point.color}`;
-      pinTail.style.marginTop = '-2px';
-
-      markerElement.appendChild(pinHead);
-      markerElement.appendChild(pinTail);
-
-      const marker = new maplibregl.Marker({ element: markerElement, anchor: 'center' })
-        .setLngLat([point.longitude, point.latitude])
-        .addTo(map);
-
-      personMarkersRef.current[point.id] = marker;
-    });
-  }, [currentUid, currentUserLocation, hasActiveTrip, isSOSActive, members, sosActivatorId, userProfile?.uid]);
-
-  useEffect(() => {
     const query = searchText.trim();
 
     if (!query) {
@@ -470,10 +330,6 @@ export default function MapDashboardScreen({ navigation }: any) {
 
   // Trigger vibration when someone else activates SOS (not the person who pressed it)
   useEffect(() => {
-    if (!sosAlertsEnabled) {
-      return;
-    }
-
     if (isSOSActive && sosActivatorName && sosActivatorId && sosActivatorId !== userProfile?.uid) {
       if (window.navigator?.vibrate) {
         // Vibrate strongly for 15-20 seconds (like incoming call): vibrate 1000ms, pause 500ms
@@ -484,7 +340,7 @@ export default function MapDashboardScreen({ navigation }: any) {
         window.navigator.vibrate(pattern);
       }
     }
-  }, [isSOSActive, sosActivatorName, sosActivatorId, sosAlertsEnabled, userProfile?.uid]);
+  }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
 
   useEffect(() => {
     if (!mapRef.current || !activeLocation) {
@@ -521,7 +377,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     return () => {
       isCancelled = true;
     };
-  }, [currentUserLocation, hasReachedMeeting, isMeetingGuideActive, meetingPoint]);
+  }, [currentUserLocation, meetingPoint]);
 
   useEffect(() => {
     if (!currentUid || !meetingPoint || !currentUserLocation || hasReachedMeeting) {
@@ -531,10 +387,6 @@ export default function MapDashboardScreen({ navigation }: any) {
     const distanceMeters = getDistanceMeters(currentUserLocation, meetingPoint);
 
     if (distanceMeters <= 40) {
-      if (proximityAlertsEnabled) {
-        Alert.alert('ถึง Meeting Point แล้ว', 'ระบบจะบันทึกว่าคุณมาถึงจุดนัดพบแล้ว');
-      }
-
       void markMeetingReached();
       setIsMeetingGuideActive(false);
       setDismissedMeetingAlertKey(meetingKey);
@@ -546,7 +398,6 @@ export default function MapDashboardScreen({ navigation }: any) {
     markMeetingReached,
     meetingKey,
     meetingPoint,
-    proximityAlertsEnabled,
   ]);
 
   useEffect(() => {
@@ -557,10 +408,6 @@ export default function MapDashboardScreen({ navigation }: any) {
     const distanceMeters = getDistanceMeters(currentUserLocation, destination);
 
     if (distanceMeters <= 50) {
-      if (proximityAlertsEnabled) {
-        Alert.alert('ถึงปลายทางแล้ว', 'ระบบจะบันทึกว่าคุณมาถึงปลายทางแล้ว');
-      }
-
       void markDestinationReached();
     }
   }, [
@@ -569,7 +416,6 @@ export default function MapDashboardScreen({ navigation }: any) {
     destination,
     hasReachedDestination,
     markDestinationReached,
-    proximityAlertsEnabled,
   ]);
 
   useEffect(() => {
@@ -645,11 +491,31 @@ export default function MapDashboardScreen({ navigation }: any) {
       });
     };
 
-    pushPoint('destination', destination, 'Destination', '#007AFF');
+    pushPoint('destination', destination, 'Destination', '#FF3B30');
+    pushPoint('current-user', currentUserLocation, 'You', '#007AFF');
     pushPoint('search', searchedLocation, 'Search', '#34C759');
     pushPoint('dropped-pin', droppedPinLocation, 'Pin', '#FF9500');
     pushPoint('sos', isSOSActive ? sosActivatorLocation : null, 'SOS', '#D00000');
     pushPoint('meeting-point', showMeetingMarker ? meetingPoint : null, 'Meeting Point', '#F6C80A', true);
+
+    members.forEach((member) => {
+      if (!member.location) {
+        return;
+      }
+
+      pointsFeatures.push({
+        type: 'Feature',
+        id: `member-${member.id}`,
+        geometry: {
+          type: 'Point',
+          coordinates: [member.location.longitude, member.location.latitude],
+        },
+        properties: {
+          label: member.id === userProfile?.uid ? 'You' : member.name,
+          color: member.id === userProfile?.uid ? '#007AFF' : '#8A63D2',
+        },
+      });
+    });
 
     const pointsCollection = {
       type: 'FeatureCollection',
@@ -658,7 +524,7 @@ export default function MapDashboardScreen({ navigation }: any) {
 
     const activeRoutePoints = showMeetingMarker && meetingPoint && currentUserLocation && isMeetingGuideActive
       ? meetingRoutePoints
-      : defaultTripRoutePoints;
+      : routePoints;
 
     const routeCollection = {
       type: 'FeatureCollection',
@@ -686,7 +552,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       map.setPaintProperty(
         ROUTE_LAYER_ID,
         'line-color',
-        showMeetingMarker && isMeetingGuideActive ? '#F6C80A' : '#007AFF',
+        showMeetingMarker && isMeetingGuideActive ? '#F6C80A' : '#FF7A18',
       );
     }
   }, [
@@ -695,12 +561,14 @@ export default function MapDashboardScreen({ navigation }: any) {
     destination,
     droppedPinLocation,
     isSOSActive,
+    members,
     meetingRoutePoints,
     isMeetingGuideActive,
-    defaultTripRoutePoints,
+    routePoints,
     searchedLocation,
     showMeetingMarker,
     sosActivatorLocation,
+    userProfile?.uid,
   ]);
 
   const handleTapMeetingAlert = () => {
@@ -853,18 +721,6 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     navigation.navigate('MeetingPoint');
-  };
-
-  const handleFocusMember = (member: { location: { latitude: number; longitude: number } | null }) => {
-    if (!member.location) {
-      return;
-    }
-
-    mapRef.current?.easeTo({
-      center: [member.location.longitude, member.location.latitude],
-      zoom: 16,
-      duration: 550,
-    });
   };
 
   return (
@@ -1075,7 +931,17 @@ export default function MapDashboardScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       ) : (
-        <BottomNavigationBar navigation={navigation} activeRoute="MapDashboard" />
+        <View style={styles.homeBottomNav}>
+          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Home')}>
+            <Text style={styles.navLabel}>Home</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem}>
+            <Text style={styles.navLabel}>Map</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
+            <Text style={styles.navLabel}>Settings</Text>
+          </TouchableOpacity>
+        </View>
       )}
 
       {hasActiveTrip ? (
@@ -1100,19 +966,14 @@ export default function MapDashboardScreen({ navigation }: any) {
               keyExtractor={(item) => item.id}
               contentContainerStyle={styles.memberSheetListContent}
               renderItem={({ item }) => (
-                <TouchableOpacity
-                  style={styles.memberRow}
-                  onPress={() => {
-                    handleFocusMember(item);
-                  }}
-                >
+                <View style={styles.memberRow}>
                   <Text style={styles.memberAvatar}>👤</Text>
                   <View style={styles.memberMeta}>
                     <Text style={styles.memberName}>{item.id === userProfile?.uid ? `${item.name} (You)` : item.name}</Text>
                     <Text style={styles.memberMode}>{item.locationMode.toUpperCase()} • {item.location ? 'Online' : 'Waiting GPS'}</Text>
                   </View>
                   <Text style={item.batteryLevel < 20 ? styles.lowBattery : styles.battery}>🔋 {item.batteryLevel}%</Text>
-                </TouchableOpacity>
+                </View>
               )}
             />
           ) : null}

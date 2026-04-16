@@ -7,9 +7,19 @@ import { useAuthStore } from './src/core/store/useAuthStore';
 import { useTripStore } from './src/core/store/useTripStore';
 import { getStoredTripCode } from './src/core/store/useTripStore';
 
-const Stack = createNativeStackNavigator();
+// Import หน้าจอทั้งหมดจากโฟลเดอร์ features
+import AuthChoiceScreen from './src/features/Auth/AuthChoiceScreen';
+import SignInScreen from './src/features/Auth/SignInScreen';
+import SignUpScreen from './src/features/Auth/SignUpScreen';
+import HomeScreen from './src/features/Home/HomeScreen';
+import TripManagementScreen from './src/features/TripManagement/TripManagementScreen';
+import MapDashboardScreen from './src/features/MapDashboard/MapDashboardScreen';
+import MeetingPointScreen from './src/features/MeetingPoint/MeetingPointScreen';
+import SettingsScreen from './src/features/Settings/SettingsScreen';
+import CreateTripScreen from './src/features/CreateTrip/CreateTripScreen';
+import AlertScreen from './src/features/Alert/AlertScreen';
 
-const loadScreen = (loader: () => { default: React.ComponentType<any> }) => loader().default;
+const Stack = createNativeStackNavigator();
 
 export default function App() {
   const userProfile = useAuthStore((state) => state.userProfile);
@@ -56,19 +66,19 @@ export default function App() {
       <Stack.Navigator id="root-stack" screenOptions={{ headerTintColor: '#007AFF' }}>
         {userProfile ? (
           <>
-            <Stack.Screen name="Home" getComponent={() => loadScreen(() => require('./src/features/Home/HomeScreen'))} options={{ headerShown: false }} />
-            <Stack.Screen name="TripManagement" getComponent={() => loadScreen(() => require('./src/features/TripManagement/TripManagementScreen'))} options={{ title: 'Join / Create Trip' }} />
-            <Stack.Screen name="MapDashboard" getComponent={() => loadScreen(() => require('./src/features/MapDashboard/MapDashboardScreen'))} options={{ headerShown: false }} />
-            <Stack.Screen name="MeetingPoint" getComponent={() => loadScreen(() => require('./src/features/MeetingPoint/MeetingPointScreen'))} options={{ title: 'Meeting Point', presentation: 'modal' }} />
-            <Stack.Screen name="Settings" getComponent={() => loadScreen(() => require('./src/features/Settings/SettingsScreen'))} options={{ title: 'Settings' }} />
-            <Stack.Screen name="CreateTrip" getComponent={() => loadScreen(() => require('./src/features/CreateTrip/CreateTripScreen'))} options={{ title: 'Create New Trip' }} />
-            <Stack.Screen name="Alert" getComponent={() => loadScreen(() => require('./src/features/Alert/AlertScreen'))} options={{ title: 'Alert', presentation: 'modal' }} />
+            <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="TripManagement" component={TripManagementScreen} options={{ title: 'Join / Create Trip' }} />
+            <Stack.Screen name="MapDashboard" component={MapDashboardScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="MeetingPoint" component={MeetingPointScreen} options={{ title: 'Meeting Point', presentation: 'modal' }} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+            <Stack.Screen name="CreateTrip" component={CreateTripScreen} options={{ title: 'Create New Trip' }} />
+            <Stack.Screen name="Alert" component={AlertScreen} options={{ title: 'Alert', presentation: 'modal' }} />
           </>
         ) : (
           <>
-            <Stack.Screen name="AuthChoice" getComponent={() => loadScreen(() => require('./src/features/Auth/AuthChoiceScreen'))} options={{ headerShown: false }} />
-            <Stack.Screen name="SignIn" getComponent={() => loadScreen(() => require('./src/features/Auth/SignInScreen'))} options={{ title: 'Sign in' }} />
-            <Stack.Screen name="SignUp" getComponent={() => loadScreen(() => require('./src/features/Auth/SignUpScreen'))} options={{ title: 'Sign up' }} />
+            <Stack.Screen name="AuthChoice" component={AuthChoiceScreen} options={{ headerShown: false }} />
+            <Stack.Screen name="SignIn" component={SignInScreen} options={{ title: 'Sign in' }} />
+            <Stack.Screen name="SignUp" component={SignUpScreen} options={{ title: 'Sign up' }} />
           </>
         )}
       </Stack.Navigator>

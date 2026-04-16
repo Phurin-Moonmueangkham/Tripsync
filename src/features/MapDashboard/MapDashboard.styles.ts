@@ -205,6 +205,17 @@ export const styles = StyleSheet.create({
   sosBtn: { backgroundColor: '#D9534F', padding: 12, borderRadius: 12 },
   sosBtnActive: { backgroundColor: '#888' },
   sosBtnText: { color: 'white', fontWeight: 'bold', fontSize: 15 },
+  homeBottomNav: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 16,
+    paddingBottom: 10,
+    backgroundColor: 'white',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  navItem: { alignItems: 'center' },
+  navLabel: { fontSize: 13, color: '#666', marginTop: 2 },
   memberSheet: {
     marginHorizontal: 16,
     marginBottom: 8,

@@ -1,6 +1,5 @@
 import * as Location from 'expo-location';
 import * as Battery from 'expo-battery';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   collection,
   deleteDoc,
@@ -12,7 +11,6 @@ import {
   updateDoc,
 } from 'firebase/firestore';
 import { create } from 'zustand';
-import { createJSONStorage, persist } from 'zustand/middleware';
 import { auth, db } from '../firebase/firebase';
 
 type LocationMode = 'high' | 'balanced' | 'smart';
@@ -317,12 +315,10 @@ const baseState: Omit<TripState, 'createTrip' | 'joinTrip' | 'leaveTrip' | 'setM
   isTrackingActive: false,
 };
 
-export const useTripStore = create<TripState>()(
-  persist(
-    (set, get) => ({
-      ...baseState,
-      clearTripError: () => set({ tripError: null }),
-      createTrip: async ({ tripName, destination, destinationAddress, routePoints }) => {
+export const useTripStore = create<TripState>((set, get) => ({
+  ...baseState,
+  clearTripError: () => set({ tripError: null }),
+  createTrip: async ({ tripName, destination, destinationAddress, routePoints }) => {
     const firebaseUser = auth.currentUser;
 
     if (!firebaseUser) {
@@ -403,8 +399,8 @@ export const useTripStore = create<TripState>()(
       set({ isTripLoading: false, tripError: message });
       throw new Error(message);
     }
-      },
-      joinTrip: async (tripCode) => {
+  },
+  joinTrip: async (tripCode) => {
     const firebaseUser = auth.currentUser;
 
     if (!firebaseUser) {
@@ -455,8 +451,8 @@ export const useTripStore = create<TripState>()(
       set({ isTripLoading: false, tripError: message });
       throw new Error(message);
     }
-      },
-      leaveTrip: async () => {
+  },
+  leaveTrip: async () => {
     const firebaseUser = auth.currentUser;
     const tripCode = get().currentTripCode;
 
@@ -479,8 +475,8 @@ export const useTripStore = create<TripState>()(
       set({ isTripLoading: false, tripError: message });
       throw new Error(message);
     }
-      },
-      setMeetingPoint: async ({ coordinate, address }) => {
+  },
+  setMeetingPoint: async ({ coordinate, address }) => {
     const tripCode = get().currentTripCode;
     const firebaseUser = auth.currentUser;
     const ownerId = get().ownerId;
@@ -523,8 +519,8 @@ export const useTripStore = create<TripState>()(
       set({ tripError: toErrorMessage(error) });
       throw error;
     }
-      },
-      clearMeetingPoint: async () => {
+  },
+  clearMeetingPoint: async () => {
     const tripCode = get().currentTripCode;
     const firebaseUser = auth.currentUser;
     const ownerId = get().ownerId;
@@ -565,8 +561,8 @@ export const useTripStore = create<TripState>()(
       set({ tripError: toErrorMessage(error) });
       throw error;
     }
-      },
-      markMeetingReached: async () => {
+  },
+  markMeetingReached: async () => {
     const tripCode = get().currentTripCode;
     const firebaseUser = auth.currentUser;
 
@@ -591,8 +587,8 @@ export const useTripStore = create<TripState>()(
     } catch (error) {
       set({ tripError: toErrorMessage(error) });
     }
-      },
-      markDestinationReached: async () => {
+  },
+  markDestinationReached: async () => {
     const tripCode = get().currentTripCode;
     const firebaseUser = auth.currentUser;
 
@@ -617,8 +613,8 @@ export const useTripStore = create<TripState>()(
     } catch (error) {
       set({ tripError: toErrorMessage(error) });
     }
-      },
-      completeTrip: async () => {
+  },
+  completeTrip: async () => {
     const tripCode = get().currentTripCode;
 
     if (!tripCode) {
@@ -642,8 +638,8 @@ export const useTripStore = create<TripState>()(
     } catch (error) {
       set({ tripError: toErrorMessage(error) });
     }
-      },
-      triggerSOS: async (isActive) => {
+  },
+  triggerSOS: async (isActive) => {
     const tripCode = get().currentTripCode;
     const firebaseUser = auth.currentUser;
     const currentUserLocation = get().currentUserLocation;
@@ -674,8 +670,8 @@ export const useTripStore = create<TripState>()(
     } catch (error) {
       set({ tripError: toErrorMessage(error) });
     }
-      },
-      setLocationMode: async (mode) => {
+  },
+  setLocationMode: async (mode) => {
     const firebaseUser = auth.currentUser;
     const tripCode = get().currentTripCode;
 
@@ -695,8 +691,8 @@ export const useTripStore = create<TripState>()(
     if (get().isTrackingActive) {
       await get().startLocationTracking();
     }
-      },
-      startLocationTracking: async () => {
+  },
+  startLocationTracking: async () => {
     const firebaseUser = auth.currentUser;
     const tripCode = get().currentTripCode;
 
@@ -738,14 +734,12 @@ export const useTripStore = create<TripState>()(
     const selectedMode = get().locationMode;
 
     try {
-      // Push first location immediately so all trip members can see each other without waiting for movement.
-      const firstLocation = await Location.getCurrentPositionAsync({
-        accuracy: selectedMode === 'high' ? Location.Accuracy.Highest : Location.Accuracy.Balanced,
-      });
-
-      await pushLocation(firstLocation);
-
       if (selectedMode === 'smart') {
+        const firstLocation = await Location.getCurrentPositionAsync({
+          accuracy: Location.Accuracy.Balanced,
+        });
+
+        await pushLocation(firstLocation);
 
         smartTrackingInterval = setInterval(() => {
           Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced })
@@ -779,18 +773,9 @@ export const useTripStore = create<TripState>()(
     } catch (error) {
       set({ isTrackingActive: false, tripError: toErrorMessage(error) });
     }
-      },
-      stopLocationTracking: async () => {
-        clearTrackingResources();
-        set({ isTrackingActive: false });
-      },
-    }),
-    {
-      name: 'tripsync-trip-settings',
-      storage: createJSONStorage(() => AsyncStorage),
-      partialize: (state) => ({
-        locationMode: state.locationMode,
-      }),
-    },
-  ),
-);
+  },
+  stopLocationTracking: async () => {
+    clearTrackingResources();
+    set({ isTrackingActive: false });
+  },
+}));
