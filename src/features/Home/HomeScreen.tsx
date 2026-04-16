@@ -1,8 +1,9 @@
 import React from 'react';
 import { View, Text, SafeAreaView, TouchableOpacity } from 'react-native';
+import BottomNavigationBar from '../../components/BottomNavigationBar';
 import { styles } from './HomeScreen.styles';
 
-const HomeScreen = ({ navigation }) => {
+const HomeScreen = ({ navigation }: any) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -20,17 +21,7 @@ const HomeScreen = ({ navigation }) => {
           <Text style={styles.secondaryButtonText}>Join Trip</Text>
         </TouchableOpacity>
       </View>
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('MapDashboard')}>
-          <Text style={styles.navLabel}>Map</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('Settings')}>
-          <Text style={styles.navLabel}>Settings</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNavigationBar navigation={navigation} activeRoute="Home" paddingBottom={50} />
     </SafeAreaView>
   );
 };

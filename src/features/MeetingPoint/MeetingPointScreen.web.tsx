@@ -1,6 +1,6 @@
 import maplibregl from 'maplibre-gl';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Linking, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { reverseGeocode } from '../../core/maps/googleMaps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { useTripStore } from '../../core/store/useTripStore';
@@ -222,12 +222,7 @@ export default function MeetingPointScreen({ navigation }: any) {
         address: selectedAddress || toAddressFallback(selectedPoint),
       });
 
-      if (currentUserLocation) {
-        const navUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${currentUserLocation.latitude}%2C${currentUserLocation.longitude}%3B${selectedPoint.latitude}%2C${selectedPoint.longitude}`;
-        await Linking.openURL(navUrl);
-      }
-
-      Alert.alert('สำเร็จ', 'ปักหมุดจุดนัดหมายเรียบร้อยแล้ว ระบบนำทางถูกเปิดทันที');
+      Alert.alert('สำเร็จ', 'ปักหมุดจุดนัดหมายเรียบร้อยแล้ว');
       navigation.goBack();
     } catch {
       Alert.alert('ผิดพลาด', 'ไม่สามารถบันทึกจุดนัดหมายได้');

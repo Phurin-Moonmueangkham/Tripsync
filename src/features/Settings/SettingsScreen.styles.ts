@@ -12,6 +12,8 @@ export const styles = StyleSheet.create({
   switchRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   switchLabel: { fontSize: 15, color: '#333' },
   divider: { height: 1, backgroundColor: '#eee', marginVertical: 10 },
+  resetBtn: { marginTop: 12, alignSelf: 'flex-start' },
+  resetBtnText: { color: '#007AFF', fontWeight: '600', fontSize: 14 },
   leaveBtn: { marginTop: 30, backgroundColor: '#FDECEA', padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#D9534F' },
   leaveBtnText: { color: '#D9534F', fontWeight: 'bold', fontSize: 16 },
   logoutBtn: {

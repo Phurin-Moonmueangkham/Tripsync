@@ -12,15 +12,4 @@ export const styles = StyleSheet.create({
   primaryButtonText: { color: 'white', fontSize: 16, fontWeight: 'bold' },
   secondaryButton: { backgroundColor: 'white', padding: 16, borderRadius: 12, alignItems: 'center', borderWidth: 1.5, borderColor: '#007AFF' },
   secondaryButtonText: { color: '#007AFF', fontSize: 16, fontWeight: 'bold' },
-  bottomNav: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    paddingVertical: 16,
-    paddingBottom: 50,
-    backgroundColor: 'white',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  navItem: { alignItems: 'center' },
-  navLabel: { fontSize: 13, color: '#666', marginTop: 2 },
 });

@@ -9,6 +9,7 @@
     "web": "expo start --web",
     "prebuild:web": "node scripts/validate-env.js",
     "build:web": "expo export --platform web",
+    "postbuild:web": "node scripts/publish-privacy-policy.js",
     "deploy:firebase": "npm run build:web && npx --yes firebase-tools deploy --only hosting"
   },
   "dependencies": {

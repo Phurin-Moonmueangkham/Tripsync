@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, SafeAreaView, Switch, TouchableOpacity, Alert } from 'react-native';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { useTripStore } from '../../core/store/useTripStore';
+import { useSettingsStore } from '../../core/store/useSettingsStore';
 import { styles } from './SettingsScreen.styles';
 
 const SettingsScreen: React.FC<any> = ({ navigation }) => {
@@ -11,13 +12,14 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
   const setLocationMode = useTripStore((state) => state.setLocationMode);
   const leaveTrip = useTripStore((state) => state.leaveTrip);
   const isTripLoading = useTripStore((state) => state.isTripLoading);
-
-  const [sosAlerts, setSosAlerts] = useState(true);
-  const [proximityAlerts, setProximityAlerts] = useState(false);
+  const sosAlerts = useSettingsStore((state) => state.sosAlerts);
+  const proximityAlerts = useSettingsStore((state) => state.proximityAlerts);
+  const setSosAlerts = useSettingsStore((state) => state.setSosAlerts);
+  const setProximityAlerts = useSettingsStore((state) => state.setProximityAlerts);
+  const resetNotificationSettings = useSettingsStore((state) => state.resetNotificationSettings);
 
   const handleLogout = async () => {
     try {
-      await leaveTrip();
       await signOut();
     } catch (error) {
       if (error instanceof Error) {
@@ -30,8 +32,26 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
   };
 
   const handleLeaveTrip = async () => {
-    await leaveTrip();
-    navigation.navigate('Home');
+    try {
+      await leaveTrip();
+      navigation.navigate('Home');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Please try again.';
+      Alert.alert('Leave trip failed', message);
+    }
+  };
+
+  const handleResetNotificationSettings = () => {
+    Alert.alert('Reset notification settings?', 'This will restore the default notification preferences.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset',
+        style: 'destructive',
+        onPress: () => {
+          resetNotificationSettings();
+        },
+      },
+    ]);
   };
 
   return (
@@ -64,6 +84,10 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
           <Text style={styles.switchLabel}>Proximity Alerts</Text>
           <Switch value={proximityAlerts} onValueChange={setProximityAlerts} trackColor={{ true: '#007AFF' }} />
         </View>
+        <Text style={styles.radioSub}>Preferences are saved on this device and affect in-app alerts.</Text>
+        <TouchableOpacity style={styles.resetBtn} onPress={handleResetNotificationSettings}>
+          <Text style={styles.resetBtnText}>Reset notification settings</Text>
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={[styles.leaveBtn, isTripLoading && styles.logoutBtnDisabled]} onPress={handleLeaveTrip}>
