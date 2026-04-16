@@ -31,8 +31,20 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
   };
 
   const handleLeaveTrip = async () => {
-    await leaveTrip();
-    navigation.navigate('Home');
+    try {
+      await leaveTrip();
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Leave trip failed', error.message);
+        return;
+      }
+
+      Alert.alert('Leave trip failed', 'Please try again.');
+    }
   };
 
   return (
@@ -67,7 +79,11 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
         </View>
       </View>
 
-      <TouchableOpacity style={[styles.leaveBtn, isTripLoading && styles.logoutBtnDisabled]} onPress={handleLeaveTrip}>
+      <TouchableOpacity
+        style={[styles.leaveBtn, isTripLoading && styles.logoutBtnDisabled]}
+        onPress={handleLeaveTrip}
+        disabled={isTripLoading}
+      >
         <Text style={styles.leaveBtnText}>{isTripLoading ? 'Leaving...' : 'Leave Trip'}</Text>
       </TouchableOpacity>
 

@@ -26,10 +26,12 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [isMemberPanelExpanded, setIsMemberPanelExpanded] = useState(false);
   const [isInAppNavigation, setIsInAppNavigation] = useState(false);
   const [meetingRoutePoints, setMeetingRoutePoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
+  const [sosRoutePoints, setSosRoutePoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const memberPanelTranslateY = useRef(new Animated.Value(MEMBER_PANEL_HEIGHT - MEMBER_PANEL_HANDLE_HEIGHT)).current;
   const lastNavigationLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const sosVibrationTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
   const manualFocusUntilRef = useRef(0);
+  const hasCenteredOnCurrentLocationRef = useRef(false);
 
   const userProfile = useAuthStore((state) => state.userProfile);
   const {
@@ -68,8 +70,11 @@ export default function MapDashboardScreen({ navigation }: any) {
       setIsMemberPanelExpanded(false);
       setIsInAppNavigation(false);
       setMeetingRoutePoints([]);
+      setSosRoutePoints([]);
       memberPanelTranslateY.setValue(MEMBER_PANEL_HEIGHT - MEMBER_PANEL_HANDLE_HEIGHT);
       lastNavigationLocationRef.current = null;
+      manualFocusUntilRef.current = 0;
+      hasCenteredOnCurrentLocationRef.current = false;
     }
   }, [hasActiveTrip, memberPanelTranslateY]);
 
@@ -125,6 +130,33 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [currentUserLocation, hasActiveTrip, meetingPoint]);
 
   useEffect(() => {
+    if (!isSOSActive || !sosActivatorLocation || !currentUserLocation || sosActivatorId === currentUid) {
+      setSosRoutePoints([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    getDirectionsRoute(currentUserLocation, sosActivatorLocation)
+      .then((points) => {
+        if (cancelled) {
+          return;
+        }
+
+        setSosRoutePoints(points.length > 1 ? points : [currentUserLocation, sosActivatorLocation]);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSosRoutePoints([currentUserLocation, sosActivatorLocation]);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [currentUid, currentUserLocation, isSOSActive, sosActivatorId, sosActivatorLocation]);
+
+  useEffect(() => {
     void startLocationTracking();
 
     return () => {
@@ -133,17 +165,17 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [startLocationTracking, stopLocationTracking, locationMode]);
 
   const initialRegion = useMemo(() => {
-    if (destination) {
+    if (currentUserLocation) {
       return {
-        ...destination,
+        ...currentUserLocation,
         latitudeDelta: 0.05,
         longitudeDelta: 0.05,
       };
     }
 
-    if (currentUserLocation) {
+    if (destination) {
       return {
-        ...currentUserLocation,
+        ...destination,
         latitudeDelta: 0.05,
         longitudeDelta: 0.05,
       };
@@ -191,6 +223,43 @@ export default function MapDashboardScreen({ navigation }: any) {
       return;
     }
 
+    if (!hasCenteredOnCurrentLocationRef.current) {
+      hasCenteredOnCurrentLocationRef.current = true;
+
+      mapRef.current?.animateToRegion(
+        {
+          ...currentUserLocation,
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        700,
+      );
+
+      return;
+    }
+
+    if (isSOSActive && sosActivatorLocation && sosActivatorId !== currentUid) {
+      const route = sosRoutePoints.length > 1 ? sosRoutePoints : [currentUserLocation, sosActivatorLocation];
+
+      if (route.length > 1) {
+        mapRef.current?.fitToCoordinates(route, {
+          edgePadding: { top: 80, right: 50, bottom: 120, left: 50 },
+          animated: true,
+        });
+      } else {
+        mapRef.current?.animateToRegion(
+          {
+            ...sosActivatorLocation,
+            latitudeDelta: 0.02,
+            longitudeDelta: 0.02,
+          },
+          700,
+        );
+      }
+
+      return;
+    }
+
     if (Date.now() < manualFocusUntilRef.current) {
       return;
     }
@@ -224,7 +293,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     lastNavigationLocationRef.current = currentUserLocation;
-  }, [currentUserLocation, destination, hasActiveTrip, isInAppNavigation]);
+  }, [currentUid, currentUserLocation, destination, hasActiveTrip, isInAppNavigation, isSOSActive, sosActivatorLocation, sosActivatorId, sosRoutePoints]);
 
   useEffect(() => {
     const query = searchText.trim();
@@ -470,6 +539,8 @@ export default function MapDashboardScreen({ navigation }: any) {
           {routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
 
           {meetingRoutePoints.length > 1 ? <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={4} /> : null}
+
+          {sosRoutePoints.length > 1 ? <Polyline coordinates={sosRoutePoints} strokeColor="#D00000" strokeWidth={5} /> : null}
 
           {meetingPoint ? <Marker coordinate={meetingPoint} title="Meeting Point" pinColor="#F6C80A" /> : null}
 

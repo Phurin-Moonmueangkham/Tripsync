@@ -63,6 +63,7 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [meetingRoutePoints, setMeetingRoutePoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const [isMeetingGuideActive, setIsMeetingGuideActive] = useState(false);
   const [dismissedMeetingAlertKey, setDismissedMeetingAlertKey] = useState<string | null>(null);
+  const [sosRoutePoints, setSosRoutePoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const hasActiveTripRef = useRef(false);
@@ -399,6 +400,31 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [currentUserLocation, hasReachedMeeting, meetingPoint]);
 
   useEffect(() => {
+    if (!isSOSActive || !sosActivatorLocation || !currentUserLocation || sosActivatorId === currentUid) {
+      setSosRoutePoints([]);
+      return;
+    }
+
+    let isCancelled = false;
+
+    getDirectionsRoute(currentUserLocation, sosActivatorLocation)
+      .then((points) => {
+        if (!isCancelled) {
+          setSosRoutePoints(points.length > 1 ? points : [currentUserLocation, sosActivatorLocation]);
+        }
+      })
+      .catch(() => {
+        if (!isCancelled) {
+          setSosRoutePoints([currentUserLocation, sosActivatorLocation]);
+        }
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentUid, currentUserLocation, isSOSActive, sosActivatorId, sosActivatorLocation]);
+
+  useEffect(() => {
     if (!currentUid || !meetingPoint || !currentUserLocation || hasReachedMeeting) {
       return;
     }
@@ -541,7 +567,9 @@ export default function MapDashboardScreen({ navigation }: any) {
       features: pointsFeatures,
     };
 
-    const activeRoutePoints = showMeetingMarker && meetingPoint && currentUserLocation
+    const activeRoutePoints = isSOSActive && sosActivatorLocation && currentUserLocation && sosActivatorId !== currentUid
+      ? sosRoutePoints
+      : showMeetingMarker && meetingPoint && currentUserLocation
       ? meetingRoutePoints
       : routePoints;
 
@@ -571,10 +599,15 @@ export default function MapDashboardScreen({ navigation }: any) {
       map.setPaintProperty(
         ROUTE_LAYER_ID,
         'line-color',
-        showMeetingMarker ? '#F6C80A' : '#007AFF',
+        isSOSActive && sosActivatorLocation && sosActivatorId !== currentUid
+          ? '#D00000'
+          : showMeetingMarker
+            ? '#F6C80A'
+            : '#007AFF',
       );
     }
   }, [
+    currentUid,
     currentUserLocation,
     meetingPoint,
     destination,
@@ -585,7 +618,9 @@ export default function MapDashboardScreen({ navigation }: any) {
     routePoints,
     searchedLocation,
     showMeetingMarker,
+    sosActivatorId,
     sosActivatorLocation,
+    sosRoutePoints,
     userProfile?.uid,
   ]);
 

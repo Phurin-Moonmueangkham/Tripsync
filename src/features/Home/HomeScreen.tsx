@@ -21,7 +21,7 @@ const HomeScreen = ({ navigation }: any) => {
           <Text style={styles.secondaryButtonText}>Join Trip</Text>
         </TouchableOpacity>
       </View>
-      <BottomNavigationBar navigation={navigation} activeRoute="Home" paddingBottom={50} />
+      <BottomNavigationBar navigation={navigation} activeRoute="Home" />
     </SafeAreaView>
   );
 };

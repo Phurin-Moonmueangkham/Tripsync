@@ -19,7 +19,7 @@ const BottomNavigationBar: React.FC<BottomNavigationBarProps> = ({
   ] as const;
 
   return (
-    <View style={[styles.container, { paddingBottom }]}>
+    <View style={[styles.container, { paddingBottom }] }>
       {tabs.map((tab) => {
         const isActive = tab.route === activeRoute;
 
@@ -46,6 +46,8 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     justifyContent: 'space-around',
+    marginTop: 'auto',
+    width: '100%',
     paddingVertical: 16,
     backgroundColor: 'white',
     borderTopWidth: 1,
