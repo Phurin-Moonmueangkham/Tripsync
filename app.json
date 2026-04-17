@@ -13,20 +13,32 @@
       "backgroundColor": "#ffffff"
     },
     "ios": {
+      "bundleIdentifier": "com.phurinm.tripsync",
       "supportsTablet": true
     },
     "android": {
+      "package": "com.phurinm.tripsync",
+      "versionCode": 2,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true
     },
-    "platforms": ["ios", "android", "web"],
+    "platforms": [
+      "ios",
+      "android",
+      "web"
+    ],
     "web": {
       "bundler": "metro",
       "output": "single",
       "favicon": "./assets/favicon.png"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "5e295b18-f974-49d0-bb54-a105b074ed61"
+      }
     }
   }
 }
