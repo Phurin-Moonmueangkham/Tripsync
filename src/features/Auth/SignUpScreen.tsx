@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Alert, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, SafeAreaView, Text, TextInput, TouchableOpacity, View, Image } from 'react-native';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { styles } from './SignUpScreen.styles';
 
@@ -45,6 +45,16 @@ const SignUpScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <Image
+        source={require('../../../assets/ดีไซน์ที่ยังไม่ได้ตั้งชื่อ.png')}
+        style={styles.backgroundImage}
+        resizeMode="cover"
+      />
+      <View style={styles.darkScrim} pointerEvents="none" />
+      <View style={styles.vignette} pointerEvents="none" />
+      <View style={[styles.ambient, styles.ambientOne]} pointerEvents="none" />
+      <View style={[styles.ambient, styles.ambientTwo]} pointerEvents="none" />
+
       <View style={styles.content}>
         <Text style={styles.title}>Sign up</Text>
 
