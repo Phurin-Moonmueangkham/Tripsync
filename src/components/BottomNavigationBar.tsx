@@ -1,5 +1,6 @@
 import React from 'react';
 import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type BottomNavigationBarProps = {
   navigation: any;
@@ -12,6 +13,8 @@ const BottomNavigationBar: React.FC<BottomNavigationBarProps> = ({
   activeRoute,
   paddingBottom = 10,
 }) => {
+  const insets = useSafeAreaInsets();
+
   const tabs = [
     { label: 'Home', route: 'Home' },
     { label: 'Map', route: 'MapDashboard' },
@@ -19,7 +22,7 @@ const BottomNavigationBar: React.FC<BottomNavigationBarProps> = ({
   ] as const;
 
   return (
-    <View style={[styles.container, { paddingBottom }] }>
+    <View style={[styles.container, { paddingBottom: paddingBottom + Math.round(insets.bottom * 0.67) }] }>
       {tabs.map((tab) => {
         const isActive = tab.route === activeRoute;
 
@@ -47,22 +50,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-around',
     marginTop: 'auto',
-    width: '100%',
+    marginHorizontal: 12,
+    marginBottom: 2,
+    width: 'auto',
     paddingVertical: 16,
-    backgroundColor: 'white',
+    backgroundColor: 'rgba(17, 24, 39, 0.94)',
     borderTopWidth: 1,
-    borderTopColor: '#eee',
+    borderTopColor: '#4B5563',
+    borderWidth: 1,
+    borderColor: '#4B5563',
+    borderRadius: 16,
   },
   navItem: {
     alignItems: 'center',
   },
   navLabel: {
     fontSize: 13,
-    color: '#666',
+    color: '#9CA3AF',
     marginTop: 2,
   },
   activeNavLabel: {
-    color: '#1A1A2E',
+    color: '#E5E7EB',
     fontWeight: '700',
   },
 });

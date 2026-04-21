@@ -60,6 +60,7 @@ const SignInScreen = ({ navigation }) => {
         <TextInput
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#E5E7EB"
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
@@ -76,6 +77,7 @@ const SignInScreen = ({ navigation }) => {
             ref={passwordInputRef}
             style={[styles.input, styles.passwordInput]}
             placeholder="Password"
+            placeholderTextColor="#E5E7EB"
             secureTextEntry={!isPasswordVisible}
             value={password}
             returnKeyType="done"

@@ -61,6 +61,7 @@ const SignUpScreen = ({ navigation }) => {
         <TextInput
           style={styles.input}
           placeholder="Name"
+          placeholderTextColor="#E5E7EB"
           value={name}
           returnKeyType="next"
           onSubmitEditing={() => emailInputRef.current?.focus()}
@@ -74,6 +75,7 @@ const SignUpScreen = ({ navigation }) => {
           ref={emailInputRef}
           style={styles.input}
           placeholder="Email"
+          placeholderTextColor="#E5E7EB"
           keyboardType="email-address"
           autoCapitalize="none"
           value={email}
@@ -89,6 +91,7 @@ const SignUpScreen = ({ navigation }) => {
           ref={phoneInputRef}
           style={styles.input}
           placeholder="Phone number"
+          placeholderTextColor="#E5E7EB"
           keyboardType="phone-pad"
           value={phoneNumber}
           returnKeyType="next"
@@ -104,6 +107,7 @@ const SignUpScreen = ({ navigation }) => {
             ref={passwordInputRef}
             style={[styles.input, styles.passwordInput]}
             placeholder="Password"
+            placeholderTextColor="#E5E7EB"
             secureTextEntry={!isPasswordVisible}
             value={password}
             returnKeyType="done"

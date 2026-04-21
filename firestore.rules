@@ -13,6 +13,25 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/trips/$(tripId)).data.ownerId == request.auth.uid;
     }
 
+    function isMemberTripProgressUpdate() {
+      let changedKeys = request.resource.data.diff(resource.data).changedKeys();
+
+      return changedKeys.hasOnly([
+          'meetingReachedBy',
+          'destinationReachedBy',
+          'isSOSActive',
+          'sosActivatorId',
+          'sosActivatorName',
+          'sosActivatorLocation',
+          'updatedAt'
+        ])
+        && (!changedKeys.hasAny(['meetingReachedBy']) || request.resource.data.meetingReachedBy[request.auth.uid] == true)
+        && (!changedKeys.hasAny(['destinationReachedBy']) || request.resource.data.destinationReachedBy[request.auth.uid] == true)
+        && (!changedKeys.hasAny(['sosActivatorId'])
+          || request.resource.data.sosActivatorId == null
+          || request.resource.data.sosActivatorId == request.auth.uid);
+    }
+
     match /users/{userId} {
       allow read, write: if isSignedIn() && request.auth.uid == userId;
     }
@@ -20,7 +39,11 @@ service cloud.firestore {
     match /trips/{tripId} {
       allow read: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update, delete: if isSignedIn() && (isTripOwner(tripId) || isTripMember(tripId));
+      allow update: if isSignedIn() && (
+        isTripOwner(tripId)
+        || (isTripMember(tripId) && isMemberTripProgressUpdate())
+      );
+      allow delete: if isSignedIn() && isTripOwner(tripId);
 
       match /members/{memberId} {
         allow read: if isSignedIn();

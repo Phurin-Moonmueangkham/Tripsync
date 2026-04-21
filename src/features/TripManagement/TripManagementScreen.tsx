@@ -32,6 +32,7 @@ const TripManagementScreen: React.FC<any> = ({ navigation }) => {
       <TextInput
         style={styles.input}
         placeholder="e.g., X7Y8Z9"
+        placeholderTextColor="#E5E7EB"
         value={code}
         onChangeText={(value) => {
           clearTripError();

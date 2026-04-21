@@ -864,6 +864,7 @@ export default function MapDashboardScreen({ navigation }: any) {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search destination..."
+                placeholderTextColor="#E5E7EB"
                 returnKeyType="search"
                 autoFocus
                 value={searchText}

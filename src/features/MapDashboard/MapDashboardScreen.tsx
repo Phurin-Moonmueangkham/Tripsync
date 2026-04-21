@@ -3,6 +3,7 @@ import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Animated, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
 import { TextInput } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { MapPressEvent, Marker, Polyline, Circle } from 'react-native-maps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
@@ -12,6 +13,7 @@ import { MEMBER_PANEL_HANDLE_HEIGHT, MEMBER_PANEL_HEIGHT, toHeading } from './Ma
 import { styles } from './MapDashboard.styles';
 
 export default function MapDashboardScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const lastManualCameraChangeAt = useRef(0);
   const [mapType, setMapType] = useState<'standard' | 'satellite'>('standard');
@@ -19,6 +21,7 @@ export default function MapDashboardScreen({ navigation }: any) {
   const [isSearching, setIsSearching] = useState(false);
   const [isSuggestionLoading, setIsSuggestionLoading] = useState(false);
   const [isLocating, setIsLocating] = useState(false);
+  const [isLeavingTrip, setIsLeavingTrip] = useState(false);
   const [suggestions, setSuggestions] = useState<PlaceSuggestion[]>([]);
   const [searchedLocation, setSearchedLocation] = useState<{ latitude: number; longitude: number } | null>(null);
   const [droppedPinLocation, setDroppedPinLocation] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -51,6 +54,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     locationMode,
     tripError,
     triggerSOS,
+    leaveTrip,
     startLocationTracking,
     stopLocationTracking,
   } = useTripStore();
@@ -130,7 +134,7 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [currentUserLocation, hasActiveTrip, meetingPoint]);
 
   useEffect(() => {
-    if (!isSOSActive || !sosActivatorLocation || !currentUserLocation || sosActivatorId === currentUid) {
+    if (!isSOSActive || !sosActivatorLocation || !currentUserLocation) {
       setSosRoutePoints([]);
       return;
     }
@@ -154,7 +158,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     return () => {
       cancelled = true;
     };
-  }, [currentUid, currentUserLocation, isSOSActive, sosActivatorId, sosActivatorLocation]);
+  }, [currentUserLocation, isSOSActive, sosActivatorLocation]);
 
   useEffect(() => {
     void startLocationTracking();
@@ -190,35 +194,6 @@ export default function MapDashboardScreen({ navigation }: any) {
   }, [currentUserLocation, destination]);
 
   useEffect(() => {
-    if (!hasActiveTrip) {
-      return;
-    }
-
-    if (isInAppNavigation) {
-      return;
-    }
-
-    if (Date.now() - lastManualCameraChangeAt.current < 3500) {
-      return;
-    }
-
-    const points = [
-      ...routePoints,
-      ...members.map((member) => member.location).filter((location) => location !== null),
-      ...(destination ? [destination] : []),
-    ];
-
-    if (points.length < 2) {
-      return;
-    }
-
-    mapRef.current?.fitToCoordinates(points, {
-      edgePadding: { top: 80, right: 50, bottom: 80, left: 50 },
-      animated: true,
-    });
-  }, [destination, hasActiveTrip, isInAppNavigation, members, routePoints]);
-
-  useEffect(() => {
     if (!hasActiveTrip || !currentUserLocation) {
       return;
     }
@@ -234,28 +209,6 @@ export default function MapDashboardScreen({ navigation }: any) {
         },
         700,
       );
-
-      return;
-    }
-
-    if (isSOSActive && sosActivatorLocation && sosActivatorId !== currentUid) {
-      const route = sosRoutePoints.length > 1 ? sosRoutePoints : [currentUserLocation, sosActivatorLocation];
-
-      if (route.length > 1) {
-        mapRef.current?.fitToCoordinates(route, {
-          edgePadding: { top: 80, right: 50, bottom: 120, left: 50 },
-          animated: true,
-        });
-      } else {
-        mapRef.current?.animateToRegion(
-          {
-            ...sosActivatorLocation,
-            latitudeDelta: 0.02,
-            longitudeDelta: 0.02,
-          },
-          700,
-        );
-      }
 
       return;
     }
@@ -293,7 +246,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     }
 
     lastNavigationLocationRef.current = currentUserLocation;
-  }, [currentUid, currentUserLocation, destination, hasActiveTrip, isInAppNavigation, isSOSActive, sosActivatorLocation, sosActivatorId, sosRoutePoints]);
+  }, [currentUserLocation, destination, hasActiveTrip, isInAppNavigation]);
 
   useEffect(() => {
     const query = searchText.trim();
@@ -508,6 +461,65 @@ export default function MapDashboardScreen({ navigation }: any) {
     Alert.alert('เริ่มโหมดนำทาง', 'แผนที่จะติดตามตำแหน่งและหันตามทิศทางการเดินทางของคุณ');
   };
 
+  const handleTapSosAlert = () => {
+    if (!hasActiveTrip || !isSOSActive || !sosActivatorLocation || !currentUserLocation) {
+      return;
+    }
+
+    manualFocusUntilRef.current = Date.now() + 25000;
+    const route = sosRoutePoints.length > 1 ? sosRoutePoints : [currentUserLocation, sosActivatorLocation];
+
+    if (route.length > 1) {
+      mapRef.current?.fitToCoordinates(route, {
+        edgePadding: { top: 80, right: 50, bottom: 120, left: 50 },
+        animated: true,
+      });
+      return;
+    }
+
+    mapRef.current?.animateToRegion(
+      {
+        ...sosActivatorLocation,
+        latitudeDelta: 0.02,
+        longitudeDelta: 0.02,
+      },
+      700,
+    );
+  };
+
+  const handleShowTripCode = () => {
+    if (!currentTripCode) {
+      return;
+    }
+
+    Alert.alert('Trip Code', currentTripCode);
+  };
+
+  const handleLeaveTrip = () => {
+    if (isLeavingTrip) {
+      return;
+    }
+
+    Alert.alert('Leave Trip', 'Are you sure you want to leave this trip?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Leave',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            setIsLeavingTrip(true);
+            await leaveTrip();
+            navigation.navigate('Home');
+          } catch {
+            Alert.alert('Error', 'Failed to leave trip');
+          } finally {
+            setIsLeavingTrip(false);
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView style={[styles.container, !hasActiveTrip && styles.noTripContainer]}>
       {hasActiveTrip ? (
@@ -517,9 +529,14 @@ export default function MapDashboardScreen({ navigation }: any) {
             <Text style={styles.memberCount}>👥 {members.length} Members</Text>
             <Text style={styles.modeText}>Mode: {locationMode.toUpperCase()}</Text>
           </View>
-          <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.settingsIcon}>⚙️</Text>
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <TouchableOpacity style={styles.codeButton} onPress={handleShowTripCode}>
+              <Text style={styles.codeButtonText}>Code</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => navigation.navigate('Settings')}>
+              <Text style={styles.settingsIcon}>⚙️</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       ) : null}
 
@@ -536,7 +553,7 @@ export default function MapDashboardScreen({ navigation }: any) {
         >
           {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#007AFF" /> : null}
 
-          {routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
+          {!meetingPoint && routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
 
           {meetingRoutePoints.length > 1 ? <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={4} /> : null}
 
@@ -623,14 +640,14 @@ export default function MapDashboardScreen({ navigation }: any) {
         <View style={styles.mapControls}>
           {isSOSActive && hasActiveTrip ? (
             <View style={[styles.searchBox, { backgroundColor: '#FF3B30', borderColor: '#FF3B30', paddingVertical: 12, paddingHorizontal: 14 }]}>
-              <View style={{ flex: 1 }}>
+              <TouchableOpacity style={{ flex: 1 }} activeOpacity={0.85} onPress={handleTapSosAlert}>
                 <Text style={{ fontSize: 16, fontWeight: '700', color: '#fff', marginBottom: 4 }}>
                   🚨 {sosActivatorName} needs help!
                 </Text>
                 <Text style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)' }}>
-                  {sosActivatorLocation ? `${sosActivatorLocation.latitude.toFixed(5)}, ${sosActivatorLocation.longitude.toFixed(5)}` : 'Locating...'}
+                  Tap this alert to focus SOS route
                 </Text>
-              </View>
+              </TouchableOpacity>
               <TouchableOpacity
                 onPress={() => {
                   clearSosVibrationQueue();
@@ -646,6 +663,7 @@ export default function MapDashboardScreen({ navigation }: any) {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search destination..."
+                placeholderTextColor="#E5E7EB"
                 returnKeyType="search"
                 value={searchText}
                 onSubmitEditing={handleSearch}
@@ -757,7 +775,7 @@ export default function MapDashboardScreen({ navigation }: any) {
       {hasActiveTrip && tripError ? <Text style={styles.errorText}>{tripError}</Text> : null}
 
       {hasActiveTrip ? (
-        <View style={styles.bottomNav}>
+        <View style={[styles.bottomNav, { paddingBottom: 8 + Math.round(insets.bottom * 0.67) }]}>
           <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('MeetingPoint')}>
             <Text style={styles.navBtnText}>📍 Set Point</Text>
           </TouchableOpacity>
@@ -778,8 +796,12 @@ export default function MapDashboardScreen({ navigation }: any) {
           >
             <Text style={styles.sosBtnText}>{isSOSActive ? '✅ Cancel SOS' : '🚨 SOS'}</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.navBtn} onPress={() => navigation.navigate('Settings')}>
-            <Text style={styles.navBtnText}>⚙️ Settings</Text>
+          <TouchableOpacity
+            style={[styles.navBtn, { backgroundColor: '#D9534F' }, isLeavingTrip && { opacity: 0.6 }]}
+            onPress={handleLeaveTrip}
+            disabled={isLeavingTrip}
+          >
+            <Text style={[styles.navBtnText, { color: 'white' }]}>{isLeavingTrip ? 'Leaving...' : 'Leave Trip'}</Text>
           </TouchableOpacity>
         </View>
       ) : (

@@ -111,3 +111,11 @@ npx firebase-tools login:ci
 ```
 
 Copy the generated token and save it as `FIREBASE_TOKEN` secret.
+
+## Android release checklist
+
+For Google Play releases, follow:
+
+- [PLAYSTORE_RELEASE_CHECKLIST.md](PLAYSTORE_RELEASE_CHECKLIST.md)
+- [EAS_ANDROID_FIRST_RELEASE.md](EAS_ANDROID_FIRST_RELEASE.md)
+- [PRIVACY_AND_DATA_SAFETY_DRAFT.md](PRIVACY_AND_DATA_SAFETY_DRAFT.md)

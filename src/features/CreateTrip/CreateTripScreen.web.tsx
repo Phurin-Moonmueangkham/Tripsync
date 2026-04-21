@@ -426,6 +426,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
         <TextInput
           style={styles.input}
           placeholder="Trip name"
+          placeholderTextColor="#E5E7EB"
           value={tripName}
           onChangeText={setTripName}
         />
@@ -434,6 +435,7 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
           <TextInput
             style={[styles.input, styles.searchInput]}
             placeholder="Search destination"
+            placeholderTextColor="#E5E7EB"
             value={searchText}
             onChangeText={(value) => {
               setSearchText(value);

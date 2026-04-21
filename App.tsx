@@ -1,7 +1,7 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { useEffect, useRef } from 'react';
 import { useAuthStore } from './src/core/store/useAuthStore';
 import { useTripStore } from './src/core/store/useTripStore';
@@ -55,15 +55,26 @@ export default function App() {
 
   if (!isAuthReady) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator size="large" color="#007AFF" />
+      <View style={styles.root}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#22D3EE" />
+        </View>
       </View>
     );
   }
 
   return (
-    <NavigationContainer ref={navigationRef}>
-      <Stack.Navigator id="root-stack" screenOptions={{ headerTintColor: '#007AFF' }}>
+    <View style={styles.root}>
+      <NavigationContainer ref={navigationRef}>
+        <Stack.Navigator
+          id="root-stack"
+          screenOptions={{
+            headerTintColor: '#E5E7EB',
+            headerStyle: { backgroundColor: 'rgba(15, 23, 42, 0.95)' },
+            headerTitleStyle: { color: '#F3F4F6', fontWeight: '700' },
+            contentStyle: { backgroundColor: '#0B1220' },
+          }}
+        >
         {userProfile ? (
           <>
             <Stack.Screen name="Home" component={HomeScreen} options={{ headerShown: false }} />
@@ -81,7 +92,20 @@ export default function App() {
             <Stack.Screen name="SignUp" component={SignUpScreen} options={{ title: 'Sign up' }} />
           </>
         )}
-      </Stack.Navigator>
-    </NavigationContainer>
+        </Stack.Navigator>
+      </NavigationContainer>
+    </View>
   );
 }
+
+const styles = StyleSheet.create({
+  root: {
+    flex: 1,
+    backgroundColor: '#0B1220',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+});

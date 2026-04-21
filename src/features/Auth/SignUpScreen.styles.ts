@@ -4,6 +4,8 @@ export const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#050b18',
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   backgroundImage: {
     ...StyleSheet.absoluteFillObject,
@@ -43,11 +45,11 @@ export const styles = StyleSheet.create({
     justifyContent: 'center',
     zIndex: 1,
     marginHorizontal: 14,
-    marginVertical: 20,
+    marginVertical: 24,
     borderRadius: 24,
     borderWidth: 1,
-    borderColor: 'rgba(194, 211, 255, 0.2)',
-    backgroundColor: 'rgba(14, 23, 40, 0.66)',
+    borderColor: 'rgba(75, 85, 99, 0.7)',
+    backgroundColor: 'rgba(17, 24, 39, 0.82)',
   },
   title: {
     fontSize: 28,
@@ -60,15 +62,15 @@ export const styles = StyleSheet.create({
     textShadowRadius: 8,
   },
   input: {
-    backgroundColor: 'rgba(255, 255, 255, 0.1)',
+    backgroundColor: 'rgba(31, 41, 55, 0.88)',
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(194, 211, 255, 0.24)',
+    borderColor: 'rgba(107, 114, 128, 0.75)',
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 16,
     marginBottom: 12,
-    color: '#E7EEFC',
+    color: '#F3F4F6',
   },
   passwordInputWrapper: {
     position: 'relative',
@@ -89,7 +91,7 @@ export const styles = StyleSheet.create({
     fontSize: 18,
   },
   primaryButton: {
-    backgroundColor: '#ff5f45',
+    backgroundColor: '#0891B2',
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
