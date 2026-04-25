@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Linking, SafeAreaView, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
 import { useAuthStore } from '../../core/store/useAuthStore';
+import { useSettingsStore } from '../../core/store/useSettingsStore';
 import { useTripStore } from '../../core/store/useTripStore';
 import { styles } from './MapDashboard.styles';
 
@@ -72,6 +73,7 @@ export default function MapDashboardScreen({ navigation }: any) {
   const manualFocusUntilRef = useRef(0);
 
   const userProfile = useAuthStore((state) => state.userProfile);
+  const sosAlertsEnabled = useSettingsStore((state) => state.sosAlerts);
   const {
     currentTripCode,
     tripName,
@@ -336,6 +338,10 @@ export default function MapDashboardScreen({ navigation }: any) {
 
   // Trigger vibration when someone else activates SOS (not the person who pressed it)
   useEffect(() => {
+    if (!sosAlertsEnabled) {
+      return;
+    }
+
     if (!isSOSActive && window.navigator?.vibrate) {
       window.navigator.vibrate(0);
     }
@@ -356,7 +362,7 @@ export default function MapDashboardScreen({ navigation }: any) {
         window.navigator.vibrate(0);
       }
     };
-  }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
+  }, [isSOSActive, sosAlertsEnabled, sosActivatorName, sosActivatorId, userProfile?.uid]);
 
   useEffect(() => {
     if (!mapRef.current || !activeLocation) {

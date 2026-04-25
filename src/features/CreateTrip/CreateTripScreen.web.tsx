@@ -296,9 +296,9 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       setSuggestions([]);
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert('Search failed', error.message);
+        Alert.alert('ค้นหาไม่สำเร็จ', error.message);
       } else {
-        Alert.alert('Search failed', 'Unable to search location.');
+        Alert.alert('ค้นหาไม่สำเร็จ', 'ยังไม่สามารถค้นหาสถานที่ได้ กรุณาลองใหม่อีกครั้ง');
       }
     } finally {
       setIsSearching(false);
@@ -321,9 +321,9 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       setSuggestions([]);
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert('Search failed', error.message);
+        Alert.alert('ค้นหาไม่สำเร็จ', error.message);
       } else {
-        Alert.alert('Search failed', 'Unable to search location.');
+        Alert.alert('ค้นหาไม่สำเร็จ', 'ยังไม่สามารถค้นหาสถานที่ได้ กรุณาลองใหม่อีกครั้ง');
       }
     } finally {
       setIsSearching(false);

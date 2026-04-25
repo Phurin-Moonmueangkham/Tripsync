@@ -1,8 +1,9 @@
 import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
-import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, StyleSheet, View } from 'react-native';
 import { useEffect, useRef } from 'react';
+import * as NavigationBar from 'expo-navigation-bar';
 import { useAuthStore } from './src/core/store/useAuthStore';
 import { useTripStore } from './src/core/store/useTripStore';
 import { getStoredTripCode } from './src/core/store/useTripStore';
@@ -26,6 +27,34 @@ export default function App() {
   const isAuthReady = useAuthStore((state) => state.isAuthReady);
   const initializeAuth = useAuthStore((state) => state.initializeAuth);
   const navigationRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (Platform.OS !== 'android') {
+      return;
+    }
+
+    const hideNavigationBar = async () => {
+      try {
+        await NavigationBar.setPositionAsync('absolute');
+        await NavigationBar.setBehaviorAsync('overlay-swipe');
+        await NavigationBar.setVisibilityAsync('hidden');
+      } catch {
+        // If the device does not support immersive mode, keep the app usable.
+      }
+    };
+
+    void hideNavigationBar();
+
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') {
+        void hideNavigationBar();
+      }
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     const unsubscribe = initializeAuth();

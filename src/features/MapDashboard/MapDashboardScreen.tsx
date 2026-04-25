@@ -1,18 +1,19 @@
 import * as Location from 'expo-location';
-import * as Haptics from 'expo-haptics';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Animated, FlatList, SafeAreaView, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, Animated, FlatList, SafeAreaView, Text, TouchableOpacity, Vibration, View } from 'react-native';
 import { TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import MapView, { MapPressEvent, Marker, Polyline, Circle } from 'react-native-maps';
 import { useAuthStore } from '../../core/store/useAuthStore';
 import { geocodeByText, getDirectionsRoute, getPlaceDetailsById, getPlaceSuggestions, PlaceSuggestion, reverseGeocode } from '../../core/maps/googleMaps';
+import { useSettingsStore } from '../../core/store/useSettingsStore';
 import { useTripStore } from '../../core/store/useTripStore';
 import BottomNavigationBar from '../../components/BottomNavigationBar';
 import { MEMBER_PANEL_HANDLE_HEIGHT, MEMBER_PANEL_HEIGHT, toHeading } from './MapDashboard.helpers';
 import { styles } from './MapDashboard.styles';
 
 export default function MapDashboardScreen({ navigation }: any) {
+  const hasGoogleMapsApiKey = Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim());
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const lastManualCameraChangeAt = useRef(0);
@@ -33,10 +34,12 @@ export default function MapDashboardScreen({ navigation }: any) {
   const memberPanelTranslateY = useRef(new Animated.Value(MEMBER_PANEL_HEIGHT - MEMBER_PANEL_HANDLE_HEIGHT)).current;
   const lastNavigationLocationRef = useRef<{ latitude: number; longitude: number } | null>(null);
   const sosVibrationTimeoutsRef = useRef<Array<ReturnType<typeof setTimeout>>>([]);
+  const sosVibrationIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const manualFocusUntilRef = useRef(0);
   const hasCenteredOnCurrentLocationRef = useRef(false);
 
   const userProfile = useAuthStore((state) => state.userProfile);
+  const sosAlertsEnabled = useSettingsStore((state) => state.sosAlerts);
   const {
     currentTripCode,
     tripName,
@@ -67,6 +70,13 @@ export default function MapDashboardScreen({ navigation }: any) {
       clearTimeout(timeoutId);
     });
     sosVibrationTimeoutsRef.current = [];
+
+    if (sosVibrationIntervalRef.current) {
+      clearInterval(sosVibrationIntervalRef.current);
+      sosVibrationIntervalRef.current = null;
+    }
+
+    Vibration.cancel();
   };
 
   useEffect(() => {
@@ -86,15 +96,16 @@ export default function MapDashboardScreen({ navigation }: any) {
   useEffect(() => {
     clearSosVibrationQueue();
 
+    if (!sosAlertsEnabled) {
+      return;
+    }
+
     if (isSOSActive && sosActivatorName && sosActivatorId && sosActivatorId !== userProfile?.uid) {
       try {
-        // Queue vibration pulses and keep timeout IDs so we can cancel instantly on SOS off.
-        for (let i = 0; i < 10; i += 1) {
-          const timeoutId = setTimeout(() => {
-            void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          }, i * 800);
-          sosVibrationTimeoutsRef.current.push(timeoutId);
-        }
+        Vibration.vibrate(1000);
+        sosVibrationIntervalRef.current = setInterval(() => {
+          Vibration.vibrate(1000);
+        }, 2000);
       } catch {
         // Vibration not available
       }
@@ -103,7 +114,7 @@ export default function MapDashboardScreen({ navigation }: any) {
     return () => {
       clearSosVibrationQueue();
     };
-  }, [isSOSActive, sosActivatorName, sosActivatorId, userProfile?.uid]);
+  }, [isSOSActive, sosAlertsEnabled, sosActivatorName, sosActivatorId, userProfile?.uid]);
 
   useEffect(() => {
     if (!hasActiveTrip || !meetingPoint || !currentUserLocation) {
@@ -541,101 +552,117 @@ export default function MapDashboardScreen({ navigation }: any) {
       ) : null}
 
       <View style={hasActiveTrip ? styles.mapCard : styles.mapFullScreen}>
-        <MapView
-          ref={mapRef}
-          style={hasActiveTrip ? styles.map : styles.fullMap}
-          initialRegion={initialRegion}
-          mapType={mapType}
-          showsUserLocation
-          onPress={(event) => {
-            void handleMapPress(event);
-          }}
-        >
-          {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#007AFF" /> : null}
+        {hasGoogleMapsApiKey ? (
+          <MapView
+            ref={mapRef}
+            style={hasActiveTrip ? styles.map : styles.fullMap}
+            initialRegion={initialRegion}
+            mapType={mapType}
+            showsUserLocation
+            onPress={(event) => {
+              void handleMapPress(event);
+            }}
+          >
+            {destination ? <Marker coordinate={destination} title="Destination" description={destinationAddress} pinColor="#007AFF" /> : null}
 
-          {!meetingPoint && routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
+            {!meetingPoint && routePoints.length > 1 ? <Polyline coordinates={routePoints} strokeColor="#007AFF" strokeWidth={4} /> : null}
 
-          {meetingRoutePoints.length > 1 ? <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={4} /> : null}
+            {meetingRoutePoints.length > 1 ? <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={4} /> : null}
 
-          {sosRoutePoints.length > 1 ? <Polyline coordinates={sosRoutePoints} strokeColor="#D00000" strokeWidth={5} /> : null}
+            {sosRoutePoints.length > 1 ? <Polyline coordinates={sosRoutePoints} strokeColor="#D00000" strokeWidth={5} /> : null}
 
-          {meetingPoint ? <Marker coordinate={meetingPoint} title="Meeting Point" pinColor="#F6C80A" /> : null}
+            {meetingPoint ? <Marker coordinate={meetingPoint} title="Meeting Point" pinColor="#F6C80A" /> : null}
 
-          {searchedLocation ? (
-            <Marker
-              coordinate={searchedLocation}
-              title="Search Result"
-              description="Tap marker to create a trip"
-              pinColor="#007AFF"
-              onPress={() => {
-                if (hasActiveTrip) {
-                  return;
+            {searchedLocation ? (
+              <Marker
+                coordinate={searchedLocation}
+                title="Search Result"
+                description="Tap marker to create a trip"
+                pinColor="#007AFF"
+                onPress={() => {
+                  if (hasActiveTrip) {
+                    return;
+                  }
+
+                  const fallbackAddress = searchText.trim();
+                  promptCreateTripFromLocation(searchedLocation, fallbackAddress);
+                }}
+              />
+            ) : null}
+
+            {droppedPinLocation && !hasActiveTrip ? (
+              <Marker
+                coordinate={droppedPinLocation}
+                title="Pinned Destination"
+                description="Tap marker to create a trip"
+                pinColor="#FF2D55"
+                onPress={() => {
+                  promptCreateTripFromLocation(droppedPinLocation, droppedPinAddress);
+                }}
+              />
+            ) : null}
+
+            {members
+              .filter((member) => member.location && member.id !== currentUid)
+              .map((member) => {
+                const isSOSActivator = isSOSActive && member.id === sosActivatorId;
+
+                let pinColor = '#34C759';
+                let titleSuffix = '';
+
+                if (isSOSActivator) {
+                  pinColor = '#FF3B30';
                 }
 
-                const fallbackAddress = searchText.trim();
-                promptCreateTripFromLocation(searchedLocation, fallbackAddress);
-              }}
-            />
-          ) : null}
+                if (member.id === ownerId) {
+                  titleSuffix = ' (Host)';
+                }
 
-          {droppedPinLocation && !hasActiveTrip ? (
-            <Marker
-              coordinate={droppedPinLocation}
-              title="Pinned Destination"
-              description="Tap marker to create a trip"
-              pinColor="#FF2D55"
-              onPress={() => {
-                promptCreateTripFromLocation(droppedPinLocation, droppedPinAddress);
-              }}
-            />
-          ) : null}
-
-          {members
-            .filter((member) => member.location && member.id !== currentUid)
-            .map((member) => {
-              const isSOSActivator = isSOSActive && member.id === sosActivatorId;
-
-              let pinColor = '#34C759';
-              let titleSuffix = '';
-
-              if (isSOSActivator) {
-                pinColor = '#FF3B30';
-              }
-
-              if (member.id === ownerId) {
-                titleSuffix = ' (Host)';
-              }
-
-              return (
-                <React.Fragment key={member.id}>
-                  {isSOSActivator ? (
-                    <>
-                      <Circle
-                        center={member.location!}
-                        radius={100}
-                        strokeColor="rgba(255, 59, 48, 0.8)"
-                        strokeWidth={3}
-                        fillColor="rgba(255, 59, 48, 0.2)"
-                      />
-                      <Circle
-                        center={member.location!}
-                        radius={50}
-                        strokeColor="rgba(255, 59, 48, 1)"
-                        strokeWidth={2}
-                        fillColor="rgba(255, 59, 48, 0.3)"
-                      />
-                    </>
-                  ) : null}
-                  <Marker
-                    coordinate={member.location!}
-                    title={`${member.name}${titleSuffix}`}
-                    description={isSOSActivator ? '🚨 NEEDS HELP!' : `Mode: ${member.locationMode.toUpperCase()}`}
-                    pinColor={pinColor}
-                  />
-                </React.Fragment>
-              );
-            })}
-        </MapView>
+                return (
+                  <React.Fragment key={member.id}>
+                    {isSOSActivator ? (
+                      <>
+                        <Circle
+                          center={member.location!}
+                          radius={100}
+                          strokeColor="rgba(255, 59, 48, 0.8)"
+                          strokeWidth={3}
+                          fillColor="rgba(255, 59, 48, 0.2)"
+                        />
+                        <Circle
+                          center={member.location!}
+                          radius={50}
+                          strokeColor="rgba(255, 59, 48, 1)"
+                          strokeWidth={2}
+                          fillColor="rgba(255, 59, 48, 0.3)"
+                        />
+                      </>
+                    ) : null}
+                    <Marker
+                      coordinate={member.location!}
+                      title={`${member.name}${titleSuffix}`}
+                      description={isSOSActivator ? '🚨 NEEDS HELP!' : `Mode: ${member.locationMode.toUpperCase()}`}
+                      pinColor={pinColor}
+                    />
+                  </React.Fragment>
+                );
+              })}
+          </MapView>
+        ) : (
+          <View
+            style={[
+              hasActiveTrip ? styles.map : styles.fullMap,
+              { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: '#0F172A' },
+            ]}
+          >
+            <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+              เปิดแผนที่ไม่ได้ใน Build นี้
+            </Text>
+            <Text style={{ color: '#CBD5E1', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+              กรุณาตั้งค่า EXPO_PUBLIC_GOOGLE_MAPS_API_KEY แล้ว build Android ใหม่
+            </Text>
+          </View>
+        )}
 
         <View style={styles.mapControls}>
           {isSOSActive && hasActiveTrip ? (

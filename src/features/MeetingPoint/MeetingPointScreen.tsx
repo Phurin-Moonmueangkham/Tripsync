@@ -11,6 +11,7 @@ const toAddressFallback = (coordinate: { latitude: number; longitude: number }) 
   `${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`;
 
 const MeetingPointScreen: React.FC<any> = ({ navigation }) => {
+  const hasGoogleMapsApiKey = Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim());
   const insets = useSafeAreaInsets();
   const mapRef = useRef<MapView>(null);
   const [selectedPoint, setSelectedPoint] = useState<{ latitude: number; longitude: number } | null>(null);
@@ -187,27 +188,38 @@ const MeetingPointScreen: React.FC<any> = ({ navigation }) => {
       </View>
 
       <View style={styles.mapCard}>
-        <MapView
-          ref={mapRef}
-          style={styles.map}
-          initialRegion={initialRegion}
-          onPress={isTripOwner ? handleMapPress : undefined}
-          onPoiClick={isTripOwner ? handlePoiPress : undefined}
-          showsUserLocation
-        >
-          {currentUserLocation && (
-            <Circle
-              center={currentUserLocation}
-              radius={15}
-              fillColor="rgba(0, 122, 255, 0.15)"
-              strokeColor="#007AFF"
-              strokeWidth={2}
-            />
-          )}
-          {meetingRoutePoints.length > 1 && <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={3} />}
-          {meetingPoint && <Marker coordinate={meetingPoint} title="Meeting Point" pinColor="#F6C80A" />}
-          {selectedPoint && <Marker coordinate={selectedPoint} title="Selected Point" pinColor="#007AFF" />}
-        </MapView>
+        {hasGoogleMapsApiKey ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={initialRegion}
+            onPress={isTripOwner ? handleMapPress : undefined}
+            onPoiClick={isTripOwner ? handlePoiPress : undefined}
+            showsUserLocation
+          >
+            {currentUserLocation && (
+              <Circle
+                center={currentUserLocation}
+                radius={15}
+                fillColor="rgba(0, 122, 255, 0.15)"
+                strokeColor="#007AFF"
+                strokeWidth={2}
+              />
+            )}
+            {meetingRoutePoints.length > 1 && <Polyline coordinates={meetingRoutePoints} strokeColor="#F6C80A" strokeWidth={3} />}
+            {meetingPoint && <Marker coordinate={meetingPoint} title="Meeting Point" pinColor="#F6C80A" />}
+            {selectedPoint && <Marker coordinate={selectedPoint} title="Selected Point" pinColor="#007AFF" />}
+          </MapView>
+        ) : (
+          <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: '#0F172A' }]}>
+            <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+              เปิดแผนที่ไม่ได้ใน Build นี้
+            </Text>
+            <Text style={{ color: '#CBD5E1', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+              กรุณาตั้งค่า EXPO_PUBLIC_GOOGLE_MAPS_API_KEY แล้ว build Android ใหม่
+            </Text>
+          </View>
+        )}
       </View>
 
       {isTripOwner ? (

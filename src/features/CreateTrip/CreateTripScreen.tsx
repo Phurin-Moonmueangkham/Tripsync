@@ -17,6 +17,7 @@ import { Coordinate, CreateTripRouteParams, DEFAULT_REGION } from './CreateTrip.
 import { styles } from './CreateTrip.styles';
 
 const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
+  const hasGoogleMapsApiKey = Boolean(process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim());
   const mapRef = useRef<MapView>(null);
   const createTrip = useTripStore((state) => state.createTrip);
   const isTripLoading = useTripStore((state) => state.isTripLoading);
@@ -142,6 +143,38 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
     }
   };
 
+  const handlePoiPress = async (event: any) => {
+    if (!isMapExpanded) {
+      setIsMapExpanded(true);
+      return;
+    }
+
+    const poi = event?.nativeEvent;
+
+    if (!poi?.coordinate) {
+      return;
+    }
+
+    const coordinate = poi.coordinate;
+    setDestination(coordinate);
+
+    const poiName = typeof poi.name === 'string' ? poi.name.trim() : '';
+
+    if (poiName) {
+      setDestinationAddress(poiName);
+      setSearchText(poiName);
+      return;
+    }
+
+    try {
+      const address = await reverseGeocode(coordinate);
+      setDestinationAddress(address);
+      setSearchText(address);
+    } catch {
+      setDestinationAddress(`${coordinate.latitude.toFixed(5)}, ${coordinate.longitude.toFixed(5)}`);
+    }
+  };
+
   const handleSearchDestination = async () => {
     if (!searchText.trim()) {
       return;
@@ -165,9 +198,9 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       );
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert('Search failed', error.message);
+        Alert.alert('ค้นหาไม่สำเร็จ', error.message);
       } else {
-        Alert.alert('Search failed', 'Unable to search location.');
+        Alert.alert('ค้นหาไม่สำเร็จ', 'ยังไม่สามารถค้นหาสถานที่ได้ กรุณาลองใหม่อีกครั้ง');
       }
     } finally {
       setIsSearching(false);
@@ -198,9 +231,9 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       );
     } catch (error) {
       if (error instanceof Error) {
-        Alert.alert('Search failed', error.message);
+        Alert.alert('ค้นหาไม่สำเร็จ', error.message);
       } else {
-        Alert.alert('Search failed', 'Unable to search location.');
+        Alert.alert('ค้นหาไม่สำเร็จ', 'ยังไม่สามารถค้นหาสถานที่ได้ กรุณาลองใหม่อีกครั้ง');
       }
     } finally {
       setIsSearching(false);
@@ -342,12 +375,31 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
       ) : null}
 
       <View style={styles.mapCard}>
-        <MapView ref={mapRef} style={styles.map} initialRegion={initialRegion} onPress={handleMapPress} showsUserLocation>
-          {destination ? <Marker coordinate={destination} title="Destination" /> : null}
-          {routePreview.length > 1 ? (
-            <Polyline coordinates={routePreview} strokeColor="#007AFF" strokeWidth={4} />
-          ) : null}
-        </MapView>
+        {hasGoogleMapsApiKey ? (
+          <MapView
+            ref={mapRef}
+            style={styles.map}
+            initialRegion={initialRegion}
+            onPress={handleMapPress}
+            onPoiClick={handlePoiPress}
+            showsPointsOfInterest
+            showsUserLocation
+          >
+            {destination ? <Marker coordinate={destination} title="Destination" /> : null}
+            {routePreview.length > 1 ? (
+              <Polyline coordinates={routePreview} strokeColor="#007AFF" strokeWidth={4} />
+            ) : null}
+          </MapView>
+        ) : (
+          <View style={[styles.map, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: '#0F172A' }]}>
+            <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+              เปิดแผนที่ไม่ได้ใน Build นี้
+            </Text>
+            <Text style={{ color: '#CBD5E1', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+              กรุณาตั้งค่า EXPO_PUBLIC_GOOGLE_MAPS_API_KEY แล้ว build Android ใหม่
+            </Text>
+          </View>
+        )}
 
         <View style={styles.expandHintContainer}>
           <Text style={styles.expandHintText}>Tap map to expand</Text>
@@ -366,12 +418,31 @@ const CreateTripScreen: React.FC<any> = ({ navigation, route }) => {
 
       <Modal visible={isMapExpanded} animationType="slide" presentationStyle="fullScreen" onRequestClose={() => setIsMapExpanded(false)}>
         <SafeAreaView style={styles.expandedMapContainer}>
-          <MapView ref={mapRef} style={styles.expandedMap} initialRegion={initialRegion} onPress={handleMapPress} showsUserLocation>
-            {destination ? <Marker coordinate={destination} title="Destination" /> : null}
-            {routePreview.length > 1 ? (
-              <Polyline coordinates={routePreview} strokeColor="#007AFF" strokeWidth={4} />
-            ) : null}
-          </MapView>
+          {hasGoogleMapsApiKey ? (
+            <MapView
+              ref={mapRef}
+              style={styles.expandedMap}
+              initialRegion={initialRegion}
+              onPress={handleMapPress}
+              onPoiClick={handlePoiPress}
+              showsPointsOfInterest
+              showsUserLocation
+            >
+              {destination ? <Marker coordinate={destination} title="Destination" /> : null}
+              {routePreview.length > 1 ? (
+                <Polyline coordinates={routePreview} strokeColor="#007AFF" strokeWidth={4} />
+              ) : null}
+            </MapView>
+          ) : (
+            <View style={[styles.expandedMap, { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: '#0F172A' }]}>
+              <Text style={{ color: '#F8FAFC', fontSize: 16, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
+                เปิดแผนที่ไม่ได้ใน Build นี้
+              </Text>
+              <Text style={{ color: '#CBD5E1', fontSize: 13, textAlign: 'center', lineHeight: 20 }}>
+                กรุณาตั้งค่า EXPO_PUBLIC_GOOGLE_MAPS_API_KEY แล้ว build Android ใหม่
+              </Text>
+            </View>
+          )}
 
           <TouchableOpacity
             style={[styles.locateButton, isLocating && styles.locateButtonDisabled]}

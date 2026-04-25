@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, SafeAreaView, Switch, TouchableOpacity, Alert } from 'react-native';
 import { useAuthStore } from '../../core/store/useAuthStore';
+import { useSettingsStore } from '../../core/store/useSettingsStore';
 import { useTripStore } from '../../core/store/useTripStore';
 import BottomNavigationBar from '../../components/BottomNavigationBar';
 import { styles } from './SettingsScreen.styles';
@@ -12,9 +13,10 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
   const setLocationMode = useTripStore((state) => state.setLocationMode);
   const leaveTrip = useTripStore((state) => state.leaveTrip);
   const isTripLoading = useTripStore((state) => state.isTripLoading);
-
-  const [sosAlerts, setSosAlerts] = useState(true);
-  const [proximityAlerts, setProximityAlerts] = useState(false);
+  const sosAlerts = useSettingsStore((state) => state.sosAlerts);
+  const proximityAlerts = useSettingsStore((state) => state.proximityAlerts);
+  const setSosAlerts = useSettingsStore((state) => state.setSosAlerts);
+  const setProximityAlerts = useSettingsStore((state) => state.setProximityAlerts);
 
   const handleLogout = async () => {
     try {
@@ -70,12 +72,12 @@ const SettingsScreen: React.FC<any> = ({ navigation }) => {
       <View style={styles.card}>
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>SOS Alerts</Text>
-          <Switch value={sosAlerts} onValueChange={setSosAlerts} trackColor={{ true: '#007AFF' }} />
+          <Switch value={sosAlerts} onValueChange={setSosAlerts} trackColor={{ false: '#4B5563', true: '#007AFF' }} />
         </View>
         <View style={styles.divider} />
         <View style={styles.switchRow}>
           <Text style={styles.switchLabel}>Proximity Alerts</Text>
-          <Switch value={proximityAlerts} onValueChange={setProximityAlerts} trackColor={{ true: '#007AFF' }} />
+          <Switch value={proximityAlerts} onValueChange={setProximityAlerts} trackColor={{ false: '#4B5563', true: '#007AFF' }} />
         </View>
       </View>
 

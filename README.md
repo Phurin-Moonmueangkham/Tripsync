@@ -19,11 +19,23 @@ EXPO_PUBLIC_FIREBASE_PROJECT_ID=...
 EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=...
 EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=...
 EXPO_PUBLIC_FIREBASE_APP_ID=...
+EXPO_PUBLIC_GOOGLE_MAPS_API_KEY=...
 ```
+
+`EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` is required for Android native map screens (`react-native-maps`).
+
+For Android builds, Expo reads this from `app.config.js` and injects it into `android.config.googleMaps.apiKey`.
+If you use EAS, add the same variable as an environment secret named `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY` in the `preview` and `production` environments.
 
 ## 3) Run in development
 
 ### Mobile (Expo Go)
+
+```bash
+npm run start:tunnel
+```
+
+If you prefer calling Expo directly, use:
 
 ```bash
 npx expo start --tunnel
