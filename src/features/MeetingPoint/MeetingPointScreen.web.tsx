@@ -246,41 +246,54 @@ export default function MeetingPointScreen({ navigation }: any) {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.headerCard}>
-        <Text style={styles.title}>Meeting Point</Text>
-        <Text style={styles.subtitle}>แตะบนแผนที่เพื่อปักหมุดจุดนัดหมายของทีม</Text>
-        {!isTripOwner ? <Text style={styles.ownerOnlyText}>เฉพาะคนสร้างทริปเท่านั้นที่สามารถปัก/ยกเลิกหมุดได้</Text> : null}
-        <Text style={styles.hintText}>
-          {selectedAddress || meetingPointAddress || 'ยังไม่มีจุดนัดหมาย'}
-        </Text>
-      </View>
-
-      <View style={styles.mapCard}>
-        <div
-          ref={mapContainerRef}
-          style={{
-            width: '100%',
-            height: '100%',
-            borderRadius: 14,
-            overflow: 'hidden',
-            backgroundColor: '#E8EEF8',
-          }}
-        />
-      </View>
-
-      {isTripOwner ? (
-        <View style={styles.actionsRow}>
-          <TouchableOpacity style={styles.saveBtn} onPress={handleSaveMeetingPoint}>
-            <Text style={styles.saveBtnText}>📌 ปักหมุดจุดนัดหมาย</Text>
-          </TouchableOpacity>
-          {canCancelMeetingPoint ? (
-            <TouchableOpacity style={styles.cancelBtn} onPress={handleClearMeetingPoint}>
-              <Text style={styles.cancelBtnText}>ยกเลิกหมุด</Text>
-            </TouchableOpacity>
-          ) : null}
+    <div
+      style={{
+        minHeight: '100vh',
+        width: '100%',
+        padding: '18px 12px',
+        boxSizing: 'border-box',
+        background: 'radial-gradient(120% 120% at 20% 0%, #1f2937 0%, #0b1220 58%, #040712 100%)',
+      }}
+    >
+      <SafeAreaView style={styles.container}>
+        <View style={styles.headerCard}>
+          <Text style={styles.title}>📍 Meeting Point</Text>
+          <Text style={styles.subtitle}>แตะบนแผนที่เพื่อปักหมุดจุดนัดหมายของทีม</Text>
+          {!isTripOwner ? <Text style={styles.ownerOnlyText}>เฉพาะคนสร้างทริปเท่านั้นที่สามารถปัก/ยกเลิกหมุดได้</Text> : null}
+          <Text style={styles.hintText}>
+            {selectedAddress || meetingPointAddress || 'ยังไม่มีจุดนัดหมาย'}
+          </Text>
         </View>
-      ) : null}
-    </SafeAreaView>
+
+        <View style={styles.mapCard}>
+          <div
+            ref={mapContainerRef}
+            style={{
+              width: '100%',
+              height: '100%',
+              borderRadius: 16,
+              overflow: 'hidden',
+              backgroundColor: '#E8EEF8',
+            }}
+          />
+          <View pointerEvents="none" style={styles.mapInfoPill}>
+            <Text style={styles.mapInfoText}>แตะบนแผนที่เพื่อเลือกตำแหน่งจุดนัดหมาย</Text>
+          </View>
+        </View>
+
+        {isTripOwner ? (
+          <View style={styles.actionsRow}>
+            <TouchableOpacity style={styles.saveBtn} onPress={handleSaveMeetingPoint} activeOpacity={0.82}>
+              <Text style={styles.saveBtnText}>📌 ปักหมุดจุดนัดหมาย</Text>
+            </TouchableOpacity>
+            {canCancelMeetingPoint ? (
+              <TouchableOpacity style={styles.cancelBtn} onPress={handleClearMeetingPoint} activeOpacity={0.85}>
+                <Text style={styles.cancelBtnText}>ยกเลิกหมุด</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        ) : null}
+      </SafeAreaView>
+    </div>
   );
 }
